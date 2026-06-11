@@ -1,0 +1,2344 @@
+---
+title: "Cryptocurrency Tweet Impact Analysis: DOGE and Bitcoin"
+subtitle: "An event study of Elon Musk's tweets on DOGE/USD and BTC/USD returns"
+author:
+  - "Madhu Siddharth Suthagar"
+  - "John Chmura"
+  - "Akash Chenchugan"
+  - "Harish Namasivayam Muthuswamy"
+  - "Yogesh Periyasamy"
+date: last-modified
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-location: left
+    number-sections: true
+    fig-cap-location: bottom
+    code-fold: true
+    code-tools: true
+    theme: cosmo
+    embed-resources: true
+execute:
+  warning: false
+  message: false
+editor: visual
+---
+
+```{r, include=FALSE}
+# Load required libraries
+library(tidyverse)
+library(broom)
+library(lubridate)
+library(pwr)
+library(knitr)
+library(kableExtra)
+library(quantmod)
+```
+
+# Abstract
+
+This study examines the relationship between social media content (specifically tweets from Elon Musk) and cryptocurrency price movements for both Dogecoin (DOGE) and Bitcoin (BTC). We employ event study methodology to analyze price returns following tweet events across multiple time horizons (1-day, 3-day, and 7-day). The analysis processes over 20,000 tweets, identifying 58 contextually relevant Dogecoin-related tweets and Bitcoin-related tweets for detailed statistical analysis. For Dogecoin, we compare tweet-driven returns to randomly sampled baseline returns using Welch t-tests, Mann-Whitney U tests, and effect size calculations (Cohen's d). Multiple testing correction methods (Bonferroni and False Discovery Rate) are applied to control for false positives. For Bitcoin, we test four hypotheses regarding sentiment effects, negative sentiment events, tweet volume-volatility relationships, and temporal decay of effects. Key findings include evidence of differential returns by tweet category for Dogecoin, with meme-related tweets showing distinct patterns compared to contextually relevant tweets. Bitcoin analysis reveals weak sentiment-return relationships and stronger associations between tweet volume and volatility. Results are interpreted with appropriate consideration of sample size limitations and statistical power constraints.
+
+# Introduction
+
+## Research Questions
+
+This analysis addresses the following research questions:
+
+1.  **Do tweets have a statistically significant impact on Dogecoin price movements?**
+    -   We test whether returns following tweet events differ significantly from baseline (random) returns.
+2.  **Do different types of tweets (meme vs. relevant) have differential impacts?**
+    -   We compare returns following meme-related tweets versus contextually relevant tweets.
+3.  **How do tweet impacts vary across different time horizons?**
+    -   We examine returns at 1-day, 3-day, and 7-day horizons to understand temporal patterns.
+4.  **What is the practical significance of any observed effects?**
+    -   We calculate effect sizes and performance metrics to assess practical, not just statistical, significance.
+5.  **Do sentiment scores predict future returns?**
+    -   We examine correlations and regression relationships between sentiment and returns.
+
+## Background and Motivation
+
+Social media has become a significant factor in financial markets, with high-profile individuals' tweets potentially influencing asset prices. This analysis focuses specifically on tweets from Elon Musk, whose social media activity has been shown to have substantial influence on cryptocurrency markets, particularly Dogecoin. Dogecoin, a cryptocurrency that originated as a meme, provides an interesting case study for examining these relationships. This analysis uses a rigorous statistical framework to test whether observed price movements following tweets are statistically significant or could occur by chance.
+
+## Data Overview
+
+This analysis examines the relationship between Elon Musk's tweets and cryptocurrency price movements for both Dogecoin (DOGE) and Bitcoin (BTC). The analysis uses:
+
+1.  **Tweet Data**: `sentiment_classified.csv` - Contains tweet sentiment classifications and metadata for all tweets
+2.  **Dogecoin Price Data**: `doge_daily_10years.csv` - Daily DOGE price data with OHLCV information
+3.  **Bitcoin Price Data**: `BTC_USD_data_2013_to_present.csv` - Daily BTC price data fetched from Yahoo Finance
+
+### Dataset Creation Process
+
+The `sentiment_classified.csv` dataset was created through a multi-step data processing pipeline:
+
+1.  **Initial Data Collection**: The dataset began with raw tweet data collected from Elon Musk's Twitter/X account, containing tweet text, timestamps, and basic metadata. All tweets in this analysis are from Elon Musk's account.
+
+2.  **Sentiment Analysis**: Sentiment scores were added to each tweet using the OpenAI API. These scores quantify the emotional tone and sentiment expressed in the tweet content.
+
+3.  **Keyword-Based Categorization**: Tweets were categorized into keyword groups based on the presence of specific terms and phrases. Categories include Doge Coin, Bitcoin, Alt coins, Ethereum/smart contracts, General crypto, Exchanges and trading, and others.
+
+4.  **OpenAI API Classification**: The dataset was processed through the OpenAI API to enhance classification accuracy. The API was used to classify tweets as contextually relevant or jokes/memes, and to refine category assignments.
+
+5.  **Manual Verification**: For the Doge Coin and Bitcoin categories specifically, classifications were manually double-checked to ensure accuracy and relevance. This manual verification step provides higher confidence in the quality of these primary categories.
+
+6.  **Sentiment Interpretation**: It is important to note that sentiment scores have different interpretations depending on the category:
+
+    -   For **Doge Coin** and **Bitcoin** categories: Sentiment reflects sentiment about Dogecoin or Bitcoin specifically, as these were manually verified.
+    -   For **other keyword groups** (Alt coins, Ethereum, General crypto, etc.): Sentiment reflects sentiment about that specific keyword group or topic, not necessarily about Dogecoin. For example, a tweet categorized as "Ethereum" with positive sentiment indicates positive sentiment about Ethereum, which may or may not relate to Dogecoin.
+
+This distinction is important when interpreting results, as sentiment in non-Doge categories may not directly reflect sentiment about Dogecoin itself.
+
+### Data File Locations
+
+-   Tweet data: `data/processed/sentiment_classified.csv`
+-   Dogecoin price data: `data/processed/doge_daily_10years.csv`
+-   Bitcoin price data: `data/processed/BTC_USD_data_2013_to_present.csv` (regenerated from Yahoo Finance if not present)
+
+> Paths in the code chunks below are written relative to this notebook's location (`analysis/`), e.g. `../data/processed/`. See `PROJECT_STRUCTURE.md` for the full layout.
+
+### Expected Data Structure
+
+**sentiment_classified.csv columns:** - `tweet_id`: Unique tweet identifier - `createdAt`: Tweet timestamp - `context_is_relevant`: Boolean indicating if tweet is contextually relevant - `is_joke_or_meme`: Boolean indicating if tweet is a joke/meme - `sentiment`: Sentiment score (numeric) - `keyword`, `keyword_group`, `category`, `primary_group`: Categorization fields - Additional metadata fields
+
+**doge_daily_10years.csv columns:** - `Date`: Trading date - `Close`: Closing price - `Open`, `High`, `Low`: OHLC data - `Volume`: Trading volume
+
+**BTC_USD_data_2013_to_present.csv columns:** - `date`: Trading date - `open`: Opening price - `close`: Closing price - `volume_usd`: Trading volume in USD
+
+# Methodology
+
+## Event Study Framework
+
+This analysis employs an event study methodology to measure the impact of tweets on Dogecoin prices. Event studies are commonly used in finance to assess the effect of specific events on asset prices.
+
+### Event Definition
+
+An "event" is defined as a tweet that: 1. Is contextually relevant (`context_is_relevant == TRUE`) 2. Is not a joke or meme (`is_joke_or_meme == FALSE`) 3. Is related to Dogecoin (contains "doge" in keyword, keyword_group, category, or primary_group) 4. Has a valid sentiment score
+
+### Return Calculation
+
+For each tweet event, we calculate percentage returns at multiple time horizons:
+
+$\text{Return}_t = \frac{P_{t+h} - P_t}{P_t} \times 100%$
+
+Where: - (P_t) is the closing price on the tweet date - (P\_{t+h}) is the closing price at horizon (h) (1-day, 3-day, or 7-day) - Returns are calculated as percentage changes
+
+### Baseline Comparison
+
+To test whether observed returns differ from what would be expected by chance, we generate a baseline control group by: 1. Randomly sampling price points from the same time period 2. Calculating returns over identical time horizons 3. Comparing tweet returns to baseline returns using statistical tests
+
+This baseline serves as a null hypothesis: if tweets have no impact, tweet returns should not differ significantly from randomly sampled returns.
+
+## Statistical Testing Framework
+
+### Hypothesis Tests
+
+**Primary Test**: Welch t-test (unequal variance) - Tests whether mean tweet returns differ from mean baseline returns - Uses Welch's correction for unequal variances - Two-sided alternative hypothesis
+
+**Non-Parametric Alternative**: Mann-Whitney U test - Validates parametric test results - Does not assume normal distribution - More robust to outliers
+
+### Effect Size Calculation
+
+Cohen's d is calculated to assess practical significance:
+
+\$d = \frac{\bar{X}_1 - \bar{X}_2}{s_{pooled}}\$
+
+Where: - (\bar{X}\_1) is the mean tweet return - (\bar{X}*2) is the mean baseline return - (s*{pooled}) is the pooled standard deviation
+
+Effect size interpretations: - (\|d\| \< 0.2): Negligible - (0.2 \leq \|d\| \< 0.5): Small - (0.5 \leq \|d\| \< 0.8): Medium - (\|d\| \geq 0.8): Large
+
+### Multiple Testing Correction
+
+When conducting multiple hypothesis tests, the risk of false positives increases. We apply two correction methods:
+
+1.  **Bonferroni Correction**: Conservative method controlling family-wise error rate
+    -   Adjusted p-value = p-value \* number of tests
+2.  **False Discovery Rate (FDR)**: Less conservative method controlling expected proportion of false discoveries
+    -   Uses Benjamini-Hochberg procedure
+
+### Performance Metrics
+
+Beyond statistical significance, we calculate practical performance metrics:
+
+-   **Hit Rate**: Proportion of positive returns
+-   **Outperform Probability**: Proportion of tweet returns exceeding baseline mean
+-   **Sharpe-like Ratio**: Mean return divided by standard deviation (risk-adjusted return)
+-   **Variance Ratio**: Ratio of tweet volatility to baseline volatility
+
+## Data Quality and Validation
+
+### Data Quality Checks
+
+-   Missing data identification and handling
+-   Outlier detection using IQR method
+-   Temporal distribution analysis
+-   Sample size validation
+
+### Reproducibility
+
+-   Fixed random seed (42) for baseline generation
+-   Deterministic data processing steps
+-   Documented parameter choices
+-   Session information recorded
+
+# Data Preprocessing
+
+## Data Loading
+
+```{r}
+# Fetch Dogecoin price data using quantmod if CSV doesn't exist
+if (!file.exists("../data/processed/doge_daily_10years.csv")) {
+  ticker <- "DOGE-USD"
+  start_date <- Sys.Date() - years(10)
+  end_date <- Sys.Date()
+  
+  cat("Fetching", ticker, "data from", as.character(start_date), "to", as.character(end_date), "...\n")
+  
+  symbol_data <- getSymbols(ticker, src = "yahoo", from = start_date, to = end_date, auto.assign = FALSE)
+  
+  if (is.null(symbol_data) || nrow(symbol_data) == 0) {
+    stop("No data returned for ", ticker, ". Check the ticker symbol or network connectivity.")
+  }
+  
+  price_data <- data.frame(
+    Date = index(symbol_data),
+    Open = as.numeric(Op(symbol_data)),
+    High = as.numeric(Hi(symbol_data)),
+    Low = as.numeric(Lo(symbol_data)),
+    Close = as.numeric(Cl(symbol_data)),
+    Volume = as.numeric(Vo(symbol_data))
+  )
+  
+  price_data$Date <- as.Date(price_data$Date)
+  
+  write.csv(price_data, "../data/processed/doge_daily_10years.csv", row.names = FALSE)
+  cat("Saved", nrow(price_data), "rows to doge_daily_10years.csv\n")
+} else {
+  cat("DOGE price data file already exists, skipping download.\n")
+}
+```
+
+```{r}
+# Fetch Bitcoin price data using quantmod if CSV doesn't exist
+if (!file.exists("../data/processed/BTC_USD_data_2013_to_present.csv")) {
+  ticker <- "BTC-USD"
+  start_date <- as.Date("2013-01-01")
+  end_date <- Sys.Date()
+  
+  cat("Fetching", ticker, "data from", as.character(start_date), "to", as.character(end_date), "...\n")
+  
+  symbol_data <- getSymbols(ticker, src = "yahoo", from = start_date, to = end_date, auto.assign = FALSE)
+  
+  if (is.null(symbol_data) || nrow(symbol_data) == 0) {
+    stop("No data returned for ", ticker, ". Check the ticker symbol or network connectivity.")
+  }
+  
+  btc_data <- data.frame(
+    date = index(symbol_data),
+    open = as.numeric(Op(symbol_data)),
+    close = as.numeric(Cl(symbol_data)),
+    volume_usd = as.numeric(Vo(symbol_data))
+  )
+  
+  btc_data$date <- as.Date(btc_data$date)
+  
+  write.csv(btc_data, "../data/processed/BTC_USD_data_2013_to_present.csv", row.names = FALSE)
+  cat("Saved", nrow(btc_data), "rows to BTC_USD_data_2013_to_present.csv\n")
+} else {
+  cat("BTC price data file already exists, skipping download.\n")
+}
+```
+
+```{r}
+# Load tweet data
+sentiment_data <- read_csv("../data/processed/sentiment_classified.csv",
+                          col_types = cols(tweet_id = col_character()))
+
+# Load Dogecoin price data from CSV
+price_data <- read_csv("../data/processed/doge_daily_10years.csv") %>%
+  mutate(Date = as.Date(Date))
+```
+
+## Data Quality Assessment
+
+```{r}
+# Check data quality: missing values, duplicates, and completeness
+missing_tweet <- sentiment_data %>%
+  summarise(
+    tweet_id = sum(is.na(tweet_id)),
+    createdAt = sum(is.na(createdAt)),
+    context_is_relevant = sum(is.na(context_is_relevant)),
+    is_joke_or_meme = sum(is.na(is_joke_or_meme)),
+    sentiment = sum(is.na(sentiment))
+  )
+
+missing_price <- price_data %>%
+  summarise(
+    Date = sum(is.na(Date)),
+    Close = sum(is.na(Close)),
+    Volume = sum(is.na(Volume))
+  )
+
+price_completeness <- price_data %>%
+  summarise(
+    total_days = n(),
+    missing_close = sum(is.na(Close)),
+    missing_volume = sum(is.na(Volume)),
+    completeness_pct = (1 - sum(is.na(Close)) / n()) * 100
+  )
+```
+
+## Data Cleaning
+
+This section performs data cleaning operations.
+
+### Step 1: Filter for Relevant Tweets
+
+```{r}
+# Filter for contextually relevant, non-meme tweets with valid sentiment
+cleaned_tweets <- sentiment_data %>%
+  filter(context_is_relevant == TRUE) %>%
+  filter(is_joke_or_meme == FALSE) %>%
+  filter(!is.na(sentiment))
+
+```
+
+### Step 2: Filter for Dogecoin-Related Tweets
+
+```{r}
+# Filter for Dogecoin-related tweets by checking keyword fields
+cleaned_tweets <- cleaned_tweets %>%
+  filter(
+    str_detect(str_to_lower(keyword), "doge") |
+    str_detect(str_to_lower(keyword_group), "doge") |
+    str_detect(str_to_lower(category), "doge") |
+    str_detect(str_to_lower(primary_group), "doge")
+  )
+
+```
+
+### Step 3: Classify Meme vs Relevant Tweets
+
+```{r}
+# Classify tweets as meme group based on keyword patterns
+cleaned_tweets <- cleaned_tweets %>%
+  mutate(
+    is_meme_group = str_detect(str_to_lower(keyword_group), "meme doge \\(internet meme\\)") |
+                    str_detect(str_to_lower(category), "meme doge \\(internet meme\\)") |
+                    str_detect(str_to_lower(primary_group), "meme doge \\(internet meme\\)")
+  )
+
+cleaned_tweets %>%
+  count(is_meme_group)
+```
+
+### Step 4: Create Sentiment Buckets
+
+```{r}
+# Create sentiment buckets: low (<3), medium (3-7), high (>7)
+cleaned_tweets <- cleaned_tweets %>%
+  mutate(
+    sentiment_bucket = case_when(
+      sentiment < 3 ~ "low",
+      sentiment <= 7 ~ "medium",
+      sentiment > 7 ~ "high",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  mutate(sentiment_bucket = factor(sentiment_bucket, levels = c("low", "medium", "high")))
+
+cleaned_tweets %>%
+  count(sentiment_bucket)
+```
+
+### Step 5: Final Cleaning
+
+```{r}
+# Final data cleaning: convert dates, remove duplicates, sort
+cleaned_tweets <- cleaned_tweets %>%
+  mutate(createdAt = as.Date(createdAt)) %>%
+  distinct(tweet_id, .keep_all = TRUE) %>%
+  arrange(createdAt)
+
+```
+
+## Prepare Price Data
+
+```{r}
+# Prepare price data: sort and calculate returns
+price_data <- price_data %>%
+  arrange(Date) %>%
+  mutate(
+    change_pct = (Close - lag(Close)) / lag(Close) * 100,
+    next_day_return = (lead(Close, 1) / Close) - 1,
+    return_7d = (lead(Close, 7) / Close) - 1,
+    return_30d = (lead(Close, 30) / Close) - 1
+  )
+```
+
+## Merge Tweets with Price Data
+
+```{r}
+# Merge cleaned tweets with price data by date
+merged_data <- cleaned_tweets %>%
+  left_join(
+    price_data %>% select(Date, Close, Open, High, Low, Volume, 
+                         change_pct, next_day_return, return_7d, return_30d),
+    by = c("createdAt" = "Date")
+  )
+
+```
+
+## Compute Event Returns at Multiple Horizons
+
+```{r}
+# Compute event returns: calculate price returns at multiple time horizons after each tweet
+compute_event_returns <- function(tweets_df, price_df, horizons_days) {
+  results <- list()
+  
+  for (horizon_days in horizons_days) {
+    event_returns <- tweets_df %>%
+      filter(!is.na(Close)) %>%
+      mutate(
+        horizon_days = horizon_days,
+        horizon_hours = horizon_days * 24,
+        event_price = Close,
+        target_date = createdAt + days(horizon_days)
+      ) %>%
+      left_join(
+        price_df %>% select(Date, Close) %>% rename(target_price = Close),
+        by = c("target_date" = "Date")
+      ) %>%
+      filter(!is.na(target_price)) %>%
+      mutate(
+        price_delta = target_price - event_price,
+        return_pct = price_delta / event_price,
+        analysis_type = "daily"
+      )
+    
+    results[[length(results) + 1]] <- event_returns
+  }
+  
+  bind_rows(results)
+}
+
+horizons <- c(1, 3, 7)
+event_returns <- compute_event_returns(merged_data, price_data, horizons)
+
+```
+
+## Generate Baseline Returns
+
+This section creates random baseline samples for comparison. Baseline returns are computed by randomly sampling price points and calculating returns over the same horizons as tweet events. This allows us to test whether tweet returns differ significantly from what would be expected by chance.
+
+```{r}
+# Generate random baseline returns for comparison: sample random dates and calculate returns
+build_random_baseline <- function(price_df, timestamp_col, count, horizons_days, random_state = 42) {
+  set.seed(random_state)
+  
+  # Get available dates
+  available_dates <- price_df[[timestamp_col]]
+  
+  # Randomly sample dates (matching tweet count)
+  sampled_dates <- sample(available_dates, size = min(count, length(available_dates)), replace = FALSE) %>%
+    sort()
+  
+  records <- list()
+  
+  for (event_date in sampled_dates) {
+    # Get event price by filtering price_df (using Date column directly)
+    event_row <- price_df %>%
+      filter(Date == event_date)
+    
+    if (nrow(event_row) == 0) {
+      next
+    }
+    
+    event_price <- event_row$Close[1]
+    
+    if (is.na(event_price) || event_price == 0) {
+      next
+    }
+    
+    for (horizon_days in horizons_days) {
+      target_date <- event_date + days(horizon_days)
+      
+      target_row <- price_df %>%
+        filter(Date == target_date)
+      
+      if (nrow(target_row) == 0) {
+        next
+      }
+      
+      target_price <- target_row$Close[1]
+      
+      if (is.na(target_price)) {
+        next
+      }
+      
+      price_delta <- target_price - event_price
+      return_pct <- price_delta / event_price
+      
+      records[[length(records) + 1]] <- tibble(
+        tweet_id = "baseline",
+        createdAt = event_date,
+        analysis_type = "daily",
+        horizon_days = horizon_days,
+        horizon_hours = horizon_days * 24,
+        price_event = event_price,
+        price_target = target_price,
+        price_delta = price_delta,
+        return_pct = return_pct,
+        sentiment = NA_real_,
+        sentiment_bucket = "baseline",
+        is_meme_group = FALSE,
+        is_baseline = TRUE
+      )
+    }
+  }
+  
+  if (length(records) == 0) {
+    return(tibble())
+  }
+  
+  bind_rows(records)
+}
+
+unique_tweet_count <- merged_data %>%
+  filter(!is.na(Close)) %>%
+  nrow()
+
+baseline_returns <- build_random_baseline(
+  price_data, 
+  "Date", 
+  unique_tweet_count, 
+  horizons,
+  random_state = 42
+)
+
+```
+
+## Create Final Datasets
+
+```{r}
+# Create final dataset combining tweet and baseline returns
+final_data <- merged_data %>%
+  filter(!is.na(Close)) %>%
+  select(tweet_id, createdAt, sentiment, sentiment_bucket, is_meme_group,
+         Close, Open, High, Low, Volume, change_pct,
+         next_day_return, return_7d, return_30d)
+
+
+event_returns_with_baseline <- event_returns %>%
+  mutate(is_baseline = FALSE) %>%
+  rename(price_event = event_price, price_target = target_price) %>%
+  select(tweet_id, createdAt, analysis_type, horizon_days, horizon_hours,
+         price_event, price_target, price_delta, return_pct,
+         sentiment, sentiment_bucket, is_meme_group, is_baseline)
+
+baseline_returns <- baseline_returns %>%
+  mutate(createdAt = as.Date(createdAt))
+
+all_returns <- bind_rows(
+  event_returns_with_baseline,
+  baseline_returns
+)
+
+```
+
+# Dogecoin Analysis
+
+This section analyzes the relationship between Elon Musk's Dogecoin-related tweets and DOGE price movements using event study methodology and statistical testing.
+
+## Data Exploration
+
+## Data Preview
+
+```{r}
+# Preview tweet and price data
+head(sentiment_data) %>%
+  select(tweet_id, createdAt, sentiment, context_is_relevant, is_joke_or_meme, 
+         keyword, category, primary_group)
+head(price_data)
+```
+
+## Data Summary
+
+```{r}
+# Summary statistics for tweet and price data
+glimpse(sentiment_data)
+
+# Summary statistics for price data
+summary(price_data)
+```
+
+## Cleaned Data Summary
+
+```{r}
+# Summary statistics of cleaned tweet data
+cleaned_tweets %>%
+  summarise(
+    total_tweets = n(),
+    meme_tweets = sum(is_meme_group),
+    relevant_tweets = sum(!is_meme_group),
+    mean_sentiment = mean(sentiment, na.rm = TRUE),
+    min_date = min(createdAt),
+    max_date = max(createdAt)
+  )
+```
+
+## Event Returns Summary
+
+```{r}
+# Summary statistics of event returns by time horizon
+event_returns %>%
+  group_by(horizon_days) %>%
+  summarise(
+    n = n(),
+    mean_return = mean(return_pct, na.rm = TRUE),
+    median_return = median(return_pct, na.rm = TRUE),
+    sd_return = sd(return_pct, na.rm = TRUE),
+    min_return = min(return_pct, na.rm = TRUE),
+    max_return = max(return_pct, na.rm = TRUE)
+  )
+```
+
+## Sentiment Over Time
+
+```{r, fig.cap="Tweet sentiment scores over time."}
+# Visualize sentiment scores over time
+final_data %>%
+  ggplot(aes(x = createdAt, y = sentiment)) +
+  geom_line(color = "steelblue", alpha = 0.6) +
+  labs(title = "Tweet Sentiment Over Time",
+       x = "Date", y = "Sentiment Score") +
+  theme_minimal()
+```
+
+## Yearly Sentiment Summary
+
+```{r}
+# Summary statistics of sentiment by year
+sentiment_yearly <- final_data %>%
+  mutate(year = year(createdAt)) %>%
+  group_by(year) %>%
+  summarise(
+    mean_sentiment = mean(sentiment, na.rm = TRUE),
+    sd_sentiment = sd(sentiment, na.rm = TRUE),
+    n = n(),
+    .groups = "drop"
+  )
+
+sentiment_yearly
+```
+
+## All-Tweets Return Strip Plot by Category
+
+This visualization shows ALL tweets from the original dataset (\~20k tweets), grouped by their category on the x-axis, with 7-day returns on the y-axis. All individual points are visible in a strip plot style. For the "doge coin" category, shapes distinguish meme vs relevant tweets.
+
+### Prepare All Tweets with Returns
+
+```{r}
+# Load all tweets and compute returns for comprehensive visualization
+all_tweets_strip <- read_csv("../data/processed/sentiment_classified.csv",
+                            col_types = cols(tweet_id = col_character())) %>%
+  mutate(
+    createdAt = as.Date(createdAt)
+  )
+
+
+# Compute returns for all tweets
+all_tweets_with_returns_strip <- all_tweets_strip %>%
+  left_join(
+    price_data %>% select(Date, Close) %>% rename(price_tweet = Close),
+    by = c("createdAt" = "Date")
+  ) %>%
+  filter(!is.na(price_tweet)) %>%
+  mutate(
+    date_1d = createdAt + days(1),
+    date_7d = createdAt + days(7)
+  ) %>%
+  left_join(
+    price_data %>% select(Date, Close) %>% rename(price_1d = Close),
+    by = c("date_1d" = "Date")
+  ) %>%
+  left_join(
+    price_data %>% select(Date, Close) %>% rename(price_7d = Close),
+    by = c("date_7d" = "Date")
+  ) %>%
+  mutate(
+    return_1d = ifelse(!is.na(price_1d), (price_1d - price_tweet) / price_tweet, NA_real_),
+    return_7d = ifelse(!is.na(price_7d), (price_7d - price_tweet) / price_tweet, NA_real_)
+  )
+
+all_tweets_with_returns_strip %>%
+  count(category, sort = TRUE) %>%
+  head(20) %>%
+  print()
+
+# Create subcategories for each category
+all_tweets_with_returns_strip <- all_tweets_with_returns_strip %>%
+  mutate(
+    plot_category = case_when(
+      # Meme subcategory: is_joke_or_meme == TRUE
+      is_joke_or_meme == TRUE ~ paste0(category, " - Meme"),
+      # Relevant subcategory: context_is_relevant == TRUE AND not a joke/meme
+      context_is_relevant == TRUE & is_joke_or_meme == FALSE ~ paste0(category, " - Relevant"),
+      # Other subcategory: neither meme nor relevant
+      TRUE ~ paste0(category, " - Other")
+    ),
+    # Create shape variable: meme/relevant/other based on classification
+    point_shape = case_when(
+      is_joke_or_meme == TRUE ~ "Meme",
+      context_is_relevant == TRUE & is_joke_or_meme == FALSE ~ "Relevant",
+      TRUE ~ "Other"
+    )
+  )
+
+```
+
+### All-Tweets Strip Plots: 1-Day and 7-Day Returns by Category
+
+```{r, fig.cap="Returns for all tweets by category. Meme and Relevant tweets are highlighted with distinct shapes and colors."}
+# Create strip plots for all tweets
+plot_data <- all_tweets_with_returns_strip %>%
+  mutate(plot_category = factor(plot_category))
+
+plot_data_7d <- plot_data %>%
+  filter(!is.na(return_7d))
+
+all_categories_7d <- unique(plot_data_7d$plot_category)
+base_categories_7d <- str_replace_all(all_categories_7d, " - (Meme|Relevant|Other)$", "")
+unique_base_categories_7d <- unique(base_categories_7d)
+
+base_color_values_7d <- ifelse(
+  str_detect(str_to_lower(unique_base_categories_7d), "doge|coin|crypto"), 
+  "#F39C12", 
+  "#95A5A6"
+)
+names(base_color_values_7d) <- unique_base_categories_7d
+
+category_color_map_7d <- setNames(
+  base_color_values_7d[base_categories_7d],
+  all_categories_7d
+)
+
+plot_data_7d <- plot_data_7d %>%
+  mutate(
+    base_category = str_replace_all(plot_category, " - (Meme|Relevant|Other)$", ""),
+    point_color = case_when(
+      point_shape == "Meme" ~ "Meme",
+      point_shape == "Relevant" ~ "Relevant",
+      TRUE ~ base_category
+    )
+  )
+
+all_colors_7d <- c(category_color_map_7d, "Meme" = "#E74C3C", "Relevant" = "#3498DB")
+
+plot_7d <- plot_data_7d %>%
+  ggplot(aes(x = plot_category, y = return_7d)) +
+  geom_jitter(data = filter(plot_data_7d, point_shape == "Other"),
+              aes(color = point_color),
+              width = 0.2, alpha = 0.1, size = 0.8, shape = 16) +
+  geom_jitter(data = filter(plot_data_7d, point_shape == "Meme"),
+              aes(shape = point_shape, color = point_color),
+              width = 0.2, alpha = 0.8, size = 1.5) +
+  geom_jitter(data = filter(plot_data_7d, point_shape == "Relevant"),
+              aes(shape = point_shape, color = point_color),
+              width = 0.2, alpha = 0.8, size = 1.5) +
+  scale_color_manual(values = all_colors_7d, guide = "none") +
+  scale_shape_manual(values = c("Meme" = 17, "Relevant" = 15), 
+                     name = "Doge Coin Type",
+                     guide = guide_legend(override.aes = list(size = 3))) +
+  labs(title = "7-Day Returns by Category",
+       x = "Category", y = "7-Day Return") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "right")
+
+plot_7d
+
+plot_data_1d <- plot_data %>%
+  filter(!is.na(return_1d))
+all_categories_1d <- unique(plot_data_1d$plot_category)
+base_categories_1d <- str_replace_all(all_categories_1d, " - (Meme|Relevant|Other)$", "")
+unique_base_categories_1d <- unique(base_categories_1d)
+
+base_color_values_1d <- ifelse(
+  str_detect(str_to_lower(unique_base_categories_1d), "doge|coin|crypto"), 
+  "#F39C12", 
+  "#95A5A6"
+)
+names(base_color_values_1d) <- unique_base_categories_1d
+
+category_color_map_1d <- setNames(
+  base_color_values_1d[base_categories_1d],
+  all_categories_1d
+)
+
+plot_data_1d <- plot_data_1d %>%
+  mutate(
+    base_category = str_replace_all(plot_category, " - (Meme|Relevant|Other)$", ""),
+    point_color = case_when(
+      point_shape == "Meme" ~ "Meme",
+      point_shape == "Relevant" ~ "Relevant",
+      TRUE ~ base_category
+    )
+  )
+
+all_colors_1d <- c(category_color_map_1d, "Meme" = "#E74C3C", "Relevant" = "#3498DB")
+
+plot_1d <- plot_data_1d %>%
+  ggplot(aes(x = plot_category, y = return_1d)) +
+  geom_jitter(data = filter(plot_data_1d, point_shape == "Other"),
+              aes(color = point_color),
+              width = 0.2, alpha = 0.1, size = 0.8, shape = 16) +
+  geom_jitter(data = filter(plot_data_1d, point_shape == "Meme"),
+              aes(shape = point_shape, color = point_color),
+              width = 0.2, alpha = 0.8, size = 1.5) +
+  geom_jitter(data = filter(plot_data_1d, point_shape == "Relevant"),
+              aes(shape = point_shape, color = point_color),
+              width = 0.2, alpha = 0.8, size = 1.5) +
+  scale_color_manual(values = all_colors_1d, guide = "none") +
+  scale_shape_manual(values = c("Meme" = 17, "Relevant" = 15), 
+                     name = "Doge Coin Type",
+                     guide = guide_legend(override.aes = list(size = 3))) +
+  labs(title = "1-Day Returns by Category",
+       x = "Category", y = "1-Day Return") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "right")
+
+plot_1d
+
+plot_data %>%
+  group_by(plot_category) %>%
+  summarise(
+    n_total = n(),
+    n_with_returns = sum(!is.na(return_7d)),
+    n_missing_returns = sum(is.na(return_7d)),
+    mean_return_7d = mean(return_7d, na.rm = TRUE),
+    median_return_7d = median(return_7d, na.rm = TRUE),
+    sd_return_7d = sd(return_7d, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(n_total)) %>%
+  print()
+
+plot_data %>%
+  group_by(plot_category) %>%
+  summarise(
+    n_total = n(),
+    n_with_returns = sum(!is.na(return_1d)),
+    n_missing_returns = sum(is.na(return_1d)),
+    mean_return_1d = mean(return_1d, na.rm = TRUE),
+    median_return_1d = median(return_1d, na.rm = TRUE),
+    sd_return_1d = sd(return_1d, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(n_total)) %>%
+  print()
+```
+
+## Statistical Tests for Relevant Categories
+
+Based on visual inspection of the 7-day returns strip plot, several "Relevant" subcategories appear to show potential signal. This section performs statistical tests to determine if these categories show significant 7-day returns.
+
+### Statistical Tests for All Category Combinations
+
+```{r}
+# Statistical tests: one-sample t-tests for each category comparing returns to zero
+categories_to_test <- list(
+  "Alt coins" = "alt.*coin|coin.*alt",
+  "Ethereum/smart contracts" = "ethereum|smart.*contract|contract.*smart",
+  "General crypto" = "general.*crypto|crypto.*general|^crypto$",
+  "Exchanges and trading" = "exchange|trading",
+  "BTC" = "bitcoin|btc"
+)
+
+# Test if mean return for a category differs from zero
+test_category_returns <- function(data, category_name, pattern, return_col, shape_filter) {
+  category_data <- data %>%
+    mutate(base_category = str_replace_all(plot_category, " - (Meme|Relevant|Other)$", "")) %>%
+    filter(str_detect(str_to_lower(base_category), pattern))
+  
+  if (shape_filter == "Relevant") {
+    category_data <- category_data %>%
+      filter(str_detect(plot_category, " - Relevant$"))
+  } else if (shape_filter == "Meme") {
+    category_data <- category_data %>%
+      filter(str_detect(plot_category, " - Meme$"))
+  } else if (shape_filter == "Combined") {
+    category_data <- category_data %>%
+      filter(point_shape %in% c("Meme", "Relevant"))
+  }
+  
+  category_data <- category_data %>%
+    filter(!is.na(!!sym(return_col)))
+  
+  if (nrow(category_data) < 3) {
+    return(tibble(
+      category = category_name,
+      n = nrow(category_data),
+      mean_return = NA_real_,
+      median_return = NA_real_,
+      sd_return = NA_real_,
+      t_statistic = NA_real_,
+      p_value = NA_real_,
+      ci_lower = NA_real_,
+      ci_upper = NA_real_,
+      cohens_d = NA_real_,
+      effect_size = "Insufficient data",
+      significant_05 = FALSE,
+      significant_01 = FALSE
+    ))
+  }
+  
+  t_test_result <- t.test(category_data[[return_col]], mu = 0)
+  cohens_d <- mean(category_data[[return_col]], na.rm = TRUE) / sd(category_data[[return_col]], na.rm = TRUE)
+  effect_interpretation <- case_when(
+    abs(cohens_d) < 0.2 ~ "negligible",
+    abs(cohens_d) < 0.5 ~ "small",
+    abs(cohens_d) < 0.8 ~ "medium",
+    TRUE ~ "large"
+  )
+  
+  tibble(
+    category = category_name,
+    n = nrow(category_data),
+    mean_return = mean(category_data[[return_col]], na.rm = TRUE),
+    median_return = median(category_data[[return_col]], na.rm = TRUE),
+    sd_return = sd(category_data[[return_col]], na.rm = TRUE),
+    t_statistic = t_test_result$statistic,
+    p_value = t_test_result$p.value,
+    ci_lower = t_test_result$conf.int[1],
+    ci_upper = t_test_result$conf.int[2],
+    cohens_d = cohens_d,
+    effect_size = effect_interpretation,
+    significant_05 = t_test_result$p.value < 0.05,
+    significant_01 = t_test_result$p.value < 0.01
+  )
+}
+
+# Run tests for all categories in a configuration
+run_tests_for_config <- function(return_horizon, shape_filter) {
+  return_col <- ifelse(return_horizon == "7d", "return_7d", "return_1d")
+  horizon_label <- ifelse(return_horizon == "7d", "7-day", "1-day")
+  shape_label <- ifelse(shape_filter == "Combined", "Combined (Meme + Relevant)", shape_filter)
+  
+  test_data <- all_tweets_with_returns_strip %>%
+    filter(!is.na(!!sym(return_col)))
+  
+  if (shape_filter == "Relevant") {
+    test_data <- test_data %>% filter(point_shape == "Relevant")
+  } else if (shape_filter == "Meme") {
+    test_data <- test_data %>% filter(point_shape == "Meme")
+  } else if (shape_filter == "Combined") {
+    test_data <- test_data %>% filter(point_shape %in% c("Meme", "Relevant"))
+  }
+  
+  test_results <- map2_dfr(
+    names(categories_to_test),
+    categories_to_test,
+    ~ test_category_returns(test_data, .x, .y, return_col, shape_filter)
+  )
+  
+  test_results %>%
+    mutate(
+      mean_return_pct = round(mean_return * 100, 3),
+      p_value_rounded = round(p_value, 4),
+      cohens_d_rounded = round(cohens_d, 3),
+      significant = ifelse(significant_05, ifelse(significant_01, "**", "*"), "")
+    ) %>%
+    select(category, n, mean_return_pct, p_value_rounded, cohens_d_rounded, 
+           effect_size, significant, ci_lower, ci_upper) %>%
+    arrange(p_value_rounded) %>%
+    print()
+  
+  strong_signals <- test_results %>%
+    filter(significant_05, abs(cohens_d) >= 0.3) %>%
+    arrange(desc(abs(cohens_d)))
+  
+  if (nrow(strong_signals) > 0) {
+  }
+  
+  moderate_signals <- test_results %>%
+    filter(significant_05, abs(cohens_d) < 0.3, abs(cohens_d) >= 0.2) %>%
+    arrange(desc(abs(cohens_d)))
+  
+  if (nrow(moderate_signals) > 0) {
+  }
+  
+  no_signal <- test_results %>%
+    filter(!significant_05 | is.na(significant_05)) %>%
+    arrange(p_value)
+  
+  if (nrow(no_signal) > 0) {
+  }
+  
+  return(test_results)
+}
+
+# Run all test configurations
+results_7d_relevant <- run_tests_for_config("7d", "Relevant")
+results_7d_meme <- run_tests_for_config("7d", "Meme")
+results_1d_relevant <- run_tests_for_config("1d", "Relevant")
+results_1d_meme <- run_tests_for_config("1d", "Meme")
+results_7d_combined <- run_tests_for_config("7d", "Combined")
+results_1d_combined <- run_tests_for_config("1d", "Combined")
+
+all_test_results <- bind_rows(
+  results_7d_relevant %>% mutate(test_group = "7d_Relevant", horizon = "7-day", shape_filter = "Relevant"),
+  results_7d_meme %>% mutate(test_group = "7d_Meme", horizon = "7-day", shape_filter = "Meme"),
+  results_1d_relevant %>% mutate(test_group = "1d_Relevant", horizon = "1-day", shape_filter = "Relevant"),
+  results_1d_meme %>% mutate(test_group = "1d_Meme", horizon = "1-day", shape_filter = "Meme"),
+  results_7d_combined %>% mutate(test_group = "7d_Combined", horizon = "7-day", shape_filter = "Combined"),
+  results_1d_combined %>% mutate(test_group = "1d_Combined", horizon = "1-day", shape_filter = "Combined")
+)
+
+# Apply multiple testing correction
+n_tests <- nrow(all_test_results)
+all_test_results <- all_test_results %>%
+  mutate(
+    p_value_bonferroni = pmin(p_value * n_tests, 1.0),
+    p_value_fdr = p.adjust(p_value, method = "BH"),
+    significant_05_bonferroni = p_value_bonferroni < 0.05,
+    significant_05_fdr = p_value_fdr < 0.05,
+    significant_01_bonferroni = p_value_bonferroni < 0.01,
+    significant_01_fdr = p_value_fdr < 0.01
+  )
+
+```
+
+### Summary Table: All Test Results with Multiple Testing Correction
+
+```{r}
+# Create summary table of all test results
+summary_table <- all_test_results %>%
+  mutate(
+    mean_return_pct = round(mean_return * 100, 3),
+    p_value_rounded = round(p_value, 4),
+    p_value_bonferroni_rounded = round(p_value_bonferroni, 4),
+    p_value_fdr_rounded = round(p_value_fdr, 4),
+    cohens_d_rounded = round(cohens_d, 3),
+    significant_raw = ifelse(significant_05, ifelse(significant_01, "**", "*"), ""),
+    significant_bonf = ifelse(significant_05_bonferroni, ifelse(significant_01_bonferroni, "**", "*"), ""),
+    significant_fdr = ifelse(significant_05_fdr, ifelse(significant_01_fdr, "**", "*"), ""),
+    practical_significance = case_when(
+      abs(cohens_d) >= 0.5 ~ "Medium+",
+      abs(cohens_d) >= 0.2 ~ "Small",
+      TRUE ~ "Negligible"
+    )
+  ) %>%
+  select(
+    horizon, shape_filter, category, n, mean_return_pct, 
+    p_value_rounded, p_value_bonferroni_rounded, p_value_fdr_rounded,
+    cohens_d_rounded, practical_significance,
+    significant_raw, significant_bonf, significant_fdr
+  ) %>%
+  arrange(horizon, shape_filter, p_value_rounded)
+
+summary_table %>%
+  print(n = Inf)
+
+# Visualize effect size vs p-value
+effect_size_plot <- all_test_results %>%
+  filter(!is.na(p_value) & !is.na(cohens_d)) %>%
+  mutate(
+    significance_status = case_when(
+      significant_05_fdr & abs(cohens_d) >= 0.2 ~ "Significant + Practical",
+      significant_05_fdr ~ "Significant Only",
+      abs(cohens_d) >= 0.2 ~ "Practical Only",
+      TRUE ~ "Neither"
+    ),
+    test_label = paste0(horizon, " - ", shape_filter, "\n", category)
+  ) %>%
+  ggplot(aes(x = -log10(p_value), y = abs(cohens_d), color = significance_status, size = n)) +
+  geom_point(alpha = 0.7) +
+  geom_hline(yintercept = 0.2, linetype = "dashed", color = "gray50", alpha = 0.5) +
+  geom_hline(yintercept = 0.5, linetype = "dashed", color = "gray50", alpha = 0.5) +
+  geom_vline(xintercept = -log10(0.05), linetype = "dashed", color = "gray50", alpha = 0.5) +
+  scale_color_manual(
+    values = c(
+      "Significant + Practical" = "darkgreen",
+      "Significant Only" = "blue",
+      "Practical Only" = "orange",
+      "Neither" = "gray"
+    ),
+    name = "Status"
+  ) +
+  scale_size_continuous(name = "Sample Size", range = c(1, 6)) +
+  labs(
+    title = "Effect Size vs Statistical Significance",
+    subtitle = "FDR-corrected test results with significance thresholds",
+    x = "-log10(p-value)",
+    y = "|Cohen's d|",
+    caption = "Green: Significant and meaningful | Blue: Significant only | Orange: Meaningful only"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "right")
+
+print(effect_size_plot)
+```
+
+The analysis of effect size versus statistical significance reveals a distinct divergence between model confidence and economic utility. A large cluster of results (blue) demonstrates extremely high statistical significance \$p \< 10\^{-10}\$, yet this appears to be an artifact of large sample sizes (N≈6,000–8,000) rather than strong predictive power, as the effect sizes remain negligible (∣d∣<0.1). This indicates that while these signals are technically non-random, their magnitude is likely insufficient to overcome transaction costs or spread in a practical trading environment.
+
+Conversely, a subset of strategies (orange) exhibits meaningful practical potential with medium effect sizes (∣d∣>0.2), but these fail to meet the threshold for statistical significance due to insufficient sample sizes. This suggests that the lack of significance for these high-magnitude signals is a result of low statistical power rather than a lack of predictive validity. Consequently, future optimization efforts should prioritize isolating and expanding the data for these specific horizons and filters, as they represent the most promising candidates for viable "high-risk, high-reward" strategies compared to the statistically significant but economically weak signals found elsewhere.
+
+### Interpretation: Statistical vs Practical Significance
+
+```{r}
+# Identify findings with statistical and practical significance
+meaningful_findings <- all_test_results %>%
+  filter(significant_05_fdr, abs(cohens_d) >= 0.2) %>%
+  arrange(desc(abs(cohens_d)))
+
+if (nrow(meaningful_findings) > 0) {
+  cat("Findings with both statistical and practical significance:\n")
+  print(meaningful_findings)
+} else {
+  cat("No findings meet both statistical and practical significance criteria.\n")
+}
+
+stat_only <- all_test_results %>%
+  filter(significant_05_fdr, abs(cohens_d) < 0.2) %>%
+  arrange(desc(abs(cohens_d)))
+
+if (nrow(stat_only) > 0) {
+  cat("Findings with statistical significance only (negligible effect sizes):\n")
+  print(stat_only)
+} else {
+  cat("No findings with statistical significance only.\n")
+}
+```
+
+### Validation: Meme Ethereum/Smart Contracts Finding
+
+```{r}
+# Validate the key finding: analyze distribution, outliers, and bootstrap confidence intervals
+ethereum_meme_data <- all_tweets_with_returns_strip %>%
+  filter(!is.na(return_7d)) %>%
+  filter(point_shape == "Meme") %>%
+  mutate(base_category = str_replace_all(plot_category, " - (Meme|Relevant|Other)$", "")) %>%
+  filter(str_detect(str_to_lower(base_category), "ethereum|smart.*contract|contract.*smart")) %>%
+  filter(str_detect(plot_category, " - Meme$"))
+
+if (nrow(ethereum_meme_data) > 0) {
+  q1 <- quantile(ethereum_meme_data$return_7d, 0.25, na.rm = TRUE)
+  q3 <- quantile(ethereum_meme_data$return_7d, 0.75, na.rm = TRUE)
+  iqr <- q3 - q1
+  outliers <- ethereum_meme_data %>%
+    filter(return_7d < (q1 - 1.5 * iqr) | return_7d > (q3 + 1.5 * iqr))
+  
+  if ("createdAt" %in% names(ethereum_meme_data)) {
+    ethereum_meme_data <- ethereum_meme_data %>%
+      mutate(year = year(createdAt), month = month(createdAt))
+    
+    temporal_summary <- ethereum_meme_data %>%
+      group_by(year) %>%
+      summarise(
+        n = n(),
+        mean_return = mean(return_7d, na.rm = TRUE) * 100,
+        .groups = "drop"
+      ) %>%
+      arrange(year)
+  }
+  
+  set.seed(42)
+  bootstrap_means <- replicate(1000, {
+    sample_data <- sample(ethereum_meme_data$return_7d, size = nrow(ethereum_meme_data), replace = TRUE)
+    mean(sample_data, na.rm = TRUE)
+  })
+  
+  ci_lower <- quantile(bootstrap_means, 0.025, na.rm = TRUE)
+  ci_upper <- quantile(bootstrap_means, 0.975, na.rm = TRUE)
+  
+  validation_plot <- ethereum_meme_data %>%
+    ggplot(aes(x = return_7d * 100)) +
+    geom_histogram(bins = 20, fill = "steelblue", alpha = 0.7, color = "black") +
+    geom_vline(xintercept = mean(ethereum_meme_data$return_7d, na.rm = TRUE) * 100, 
+               linetype = "dashed", color = "red", linewidth = 1) +
+    geom_vline(xintercept = 0, linetype = "solid", color = "gray50") +
+    labs(
+      title = "7-Day Returns: Meme Ethereum/Smart Contracts Tweets",
+      x = "7-Day Return (%)",
+      y = "Frequency"
+    ) +
+    theme_minimal()
+  
+  print(validation_plot)
+  
+}
+```
+
+The distribution of 7-day returns for the "Meme Ethereum/Smart Contracts" category exhibits a pronounced negative skew, indicating a general tendency toward losses. The mean return (indicated by the dashed red line) is positioned clearly to the left of the zero-return baseline (solid gray line), confirming that this signal has a negative expected value on average. While there is a substantial frequency of small positive returns (roughly 0% to 15%), they are insufficient to offset the heavier concentration of losses in the central mass of the distribution.
+
+From a risk management perspective, the significant "left tail" is the most critical feature, with outlier observations extending down to approximately -50% returns. This suggests that this specific category of tweets is subject to severe downside volatility (or "tail risk"), where adverse events lead to drastic drawdowns rather than manageable losses. Consequently, this signal appears unsuitable for a long strategy and may potentially serve better as a contrarian indicator or a filter for excluding high-risk assets from a portfolio.
+
+## Tweet Return Grouping by Category
+
+This visualization groups tweets by their return performance and colors them by tweet category (Doge-specific, Relevant, Meme).
+
+### Next-Day Returns by Tweet Category
+
+```{r}
+# Analyze next-day returns by tweet category (Meme vs Relevant)
+tweet_returns_1d <- final_data %>%
+  mutate(
+    tweet_category = case_when(
+      is_meme_group ~ "Meme",
+      TRUE ~ "Relevant"
+    ),
+    return_bucket = case_when(
+      next_day_return < -0.05 ~ "Large Negative (<-5%)",
+      next_day_return < 0 ~ "Negative (-5% to 0%)",
+      next_day_return < 0.05 ~ "Positive (0% to 5%)",
+      TRUE ~ "Large Positive (>5%)"
+    ),
+    return_bucket = factor(return_bucket, 
+                          levels = c("Large Negative (<-5%)", "Negative (-5% to 0%)",
+                                   "Positive (0% to 5%)", "Large Positive (>5%)"))
+  )
+
+# Count tweets by category and return bucket
+returns_1d_summary <- tweet_returns_1d %>%
+  group_by(return_bucket, tweet_category) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(return_bucket) %>%
+  mutate(total = sum(count), pct = count / total * 100) %>%
+  ungroup()
+
+# Grouped bar chart
+returns_1d_summary %>%
+  ggplot(aes(x = return_bucket, y = count, fill = tweet_category)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("Meme" = "#E74C3C", "Relevant" = "#3498DB", "Doge-Specific" = "#F39C12"),
+                    guide = guide_legend(title = "Tweet Category")) +
+  labs(title = "Next-Day Returns by Tweet Category",
+       x = "Return Bucket", y = "Number of Tweets",
+       fill = "Tweet Category") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Box plot showing distribution
+tweet_returns_1d %>%
+  ggplot(aes(x = tweet_category, y = next_day_return, fill = tweet_category)) +
+  geom_boxplot(alpha = 0.7) +
+  geom_jitter(width = 0.2, alpha = 0.5, size = 2) +
+  scale_fill_manual(values = c("Meme" = "#E74C3C", "Relevant" = "#3498DB", "Doge-Specific" = "#F39C12")) +
+  labs(title = "Next-Day Returns Distribution by Category",
+       x = "Tweet Category", y = "Next-Day Return") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+# Summary statistics
+tweet_returns_1d %>%
+  group_by(tweet_category) %>%
+  summarise(
+    n = n(),
+    mean_return = mean(next_day_return, na.rm = TRUE),
+    median_return = median(next_day_return, na.rm = TRUE),
+    sd_return = sd(next_day_return, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+The comparative analysis between "Meme" and "Relevant" tweet categories reveals a striking inversion of expected performance. The **Meme category** demonstrates a robust positive signal, with the majority of observations clustering in the "Positive (0% to 5%)" bucket. This is quantitatively supported by the summary statistics, which show a positive mean return of **0.70%** and a median of **1.52%**. The distribution for Meme tweets is notably leptokurtic (peaked), indicating a high consistency of small positive returns with relatively low dispersion (Standard Deviation = 3.55%).
+
+In contrast, the **Relevant category** exhibits a negative skew and significantly higher volatility. The modal (most frequent) outcome for Relevant tweets lies in the "Negative (-5% to 0%)" bucket, dragging the mean return down to **-0.68%** and the median to **-2.07%**. Visually, the bar chart highlights "fatter tails" for this category—specifically a higher frequency of "Large Negative (\<-5%)" outcomes—which suggests that "Relevant" tweets introduce substantial downside risk rather than predictive alpha.
+
+From a risk-adjusted perspective, the Meme category appears to be the superior short-term signal. With nearly half the volatility of the Relevant category (SD of 3.6% vs. 6.8%) and a positive expected value, Meme tweets offer a more stable and profitable trade entry. The Relevant category, despite its label, appears to act as a "noise" generator, characterized by erratic returns and a general tendency to underperform the market on a next-day basis.
+
+### 7-Day Returns by Tweet Category
+
+```{r}
+# Analyze 7-day returns by tweet category (Meme vs Relevant)
+tweet_returns_7d <- final_data %>%
+  mutate(
+    tweet_category = case_when(
+      is_meme_group ~ "Meme",
+      TRUE ~ "Relevant"
+    ),
+    return_bucket = case_when(
+      return_7d < -0.10 ~ "Large Negative (<-10%)",
+      return_7d < -0.05 ~ "Negative (-10% to -5%)",
+      return_7d < 0 ~ "Small Negative (-5% to 0%)",
+      return_7d < 0.05 ~ "Small Positive (0% to 5%)",
+      return_7d < 0.10 ~ "Positive (5% to 10%)",
+      TRUE ~ "Large Positive (>10%)"
+    ),
+    return_bucket = factor(return_bucket,
+                          levels = c("Large Negative (<-10%)", "Negative (-10% to -5%)",
+                                   "Small Negative (-5% to 0%)", "Small Positive (0% to 5%)",
+                                   "Positive (5% to 10%)", "Large Positive (>10%)"))
+  ) %>%
+  filter(!is.na(return_7d))
+
+# Count tweets by category and return bucket
+returns_7d_summary <- tweet_returns_7d %>%
+  group_by(return_bucket, tweet_category) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(return_bucket) %>%
+  mutate(total = sum(count), pct = count / total * 100) %>%
+  ungroup()
+
+# Grouped bar chart
+returns_7d_summary %>%
+  ggplot(aes(x = return_bucket, y = count, fill = tweet_category)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("Meme" = "#E74C3C", "Relevant" = "#3498DB", "Doge-Specific" = "#F39C12"),
+                    guide = guide_legend(title = "Tweet Category")) +
+  labs(title = "7-Day Returns by Tweet Category",
+       x = "Return Bucket", y = "Number of Tweets",
+       fill = "Tweet Category") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Box plot showing distribution
+tweet_returns_7d %>%
+  ggplot(aes(x = tweet_category, y = return_7d, fill = tweet_category)) +
+  geom_boxplot(alpha = 0.7) +
+  geom_jitter(width = 0.2, alpha = 0.5, size = 2) +
+  scale_fill_manual(values = c("Meme" = "#E74C3C", "Relevant" = "#3498DB", "Doge-Specific" = "#F39C12")) +
+  labs(title = "7-Day Returns Distribution by Category",
+       x = "Tweet Category", y = "7-Day Return") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+# Summary statistics
+tweet_returns_7d %>%
+  group_by(tweet_category) %>%
+  summarise(
+    n = n(),
+    mean_return = mean(return_7d, na.rm = TRUE),
+    median_return = median(return_7d, na.rm = TRUE),
+    sd_return = sd(return_7d, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+```
+
+The analysis reveals a massive divergence in performance between "Meme" and "Relevant" tweet categories, particularly over the 7-day horizon. The **Meme category** exhibits a strong positive expectancy, delivering an average 7-day return of **6.94%** and a median of **5.98%**. The distribution is heavily skewed toward profitability, with the largest concentration of tweets resulting in gains exceeding 10%. Conversely, the **Relevant category** shows a significant negative drift, with an average 7-day loss of **-6.19%** and a median loss of **-5.21%**. The boxplots reinforce this separation, showing that the entire interquartile range for Meme returns sits well above the zero line, while the Relevant category’s range is predominantly negative.
+
+From a risk perspective, the "Relevant" category introduces considerably higher instability without the reward. In the next-day analysis, Relevant tweets show nearly double the volatility of Meme tweets (Standard Deviation of **6.8%** vs. **3.5%**) while averaging a negative return. This "high risk, negative reward" profile is visually evident in the return buckets, where Relevant tweets frequently cluster in the "Large Negative (\<-10%)" tails. In contrast, the Meme category demonstrates a more controlled risk profile with a consistent "drift" toward small positive returns in the short term, which compounds into significant gains over the longer 7-day window.
+
+## Statistical Analysis
+
+### Correlation Analysis: Sentiment vs Returns
+
+```{r}
+# Calculate correlations between sentiment and returns at different horizons
+cor_test_1d <- cor.test(final_data$sentiment, final_data$next_day_return, 
+                       use = "complete.obs")
+cor_test_1d
+
+# Correlation between sentiment and 7-day return
+cor_test_7d <- cor.test(final_data$sentiment, final_data$return_7d, 
+                       use = "complete.obs")
+cor_test_7d
+
+# Correlation between sentiment and 30-day return
+cor_test_30d <- cor.test(final_data$sentiment, final_data$return_30d, 
+                         use = "complete.obs")
+cor_test_30d
+```
+
+The correlation analysis identifies the 7-day time horizon as the only window where sentiment demonstrates a statistically significant predictive relationship with returns. Specifically, sentiment and 7-day returns exhibit a moderate negative correlation (r=−0.29,p=0.027). This negative coefficient indicates a **contrarian signal**: periods of higher sentiment (more positive tweets) are statistically associated with lower returns over the subsequent week. This suggests that peak positive sentiment may function as a localized "top" or overreaction indicator, leading to a mean-reversion effect in the days that follow.
+
+In contrast, the relationship breaks down at both shorter and longer timeframes. The correlations for Next-Day (r=−0.12,p=0.38) and 30-Day (r=0.08,p=0.54) horizons are statistically indistinguishable from zero. This implies that while sentiment is not an immediate driver of next-day price action, nor a long-term fundamental trend indicator, it serves effectively as a weekly swing trading signal. The data supports a strategy of fading extreme sentiment specifically for 1-week holding periods, rather than using it for day trading or monthly positioning.
+
+```{r}
+# Create summary table of correlations with multiple testing correction
+corr_summary <- tibble(
+  horizon = c("1-day", "7-day", "30-day"),
+  correlation = c(cor_test_1d$estimate, cor_test_7d$estimate, cor_test_30d$estimate),
+  p_value = c(cor_test_1d$p.value, cor_test_7d$p.value, cor_test_30d$p.value),
+  p_value_bonferroni = p.adjust(c(cor_test_1d$p.value, cor_test_7d$p.value, cor_test_30d$p.value), method = "bonferroni"),
+  p_value_fdr = p.adjust(c(cor_test_1d$p.value, cor_test_7d$p.value, cor_test_30d$p.value), method = "fdr"),
+  ci_lower = c(cor_test_1d$conf.int[1], cor_test_7d$conf.int[1], cor_test_30d$conf.int[1]),
+  ci_upper = c(cor_test_1d$conf.int[2], cor_test_7d$conf.int[2], cor_test_30d$conf.int[2])
+) %>%
+  mutate(
+    significant_raw = p_value < 0.05,
+    significant_bonferroni = p_value_bonferroni < 0.05,
+    significant_fdr = p_value_fdr < 0.05
+)
+
+corr_summary
+```
+
+## Spearman Correlation Analysis
+
+```{r}
+# Calculate Spearman rank correlations (non-parametric alternative)
+spearman_1d <- cor.test(final_data$sentiment, final_data$next_day_return, 
+                        method = "spearman", use = "complete.obs")
+spearman_7d <- cor.test(final_data$sentiment, final_data$return_7d, 
+                       method = "spearman", use = "complete.obs")
+spearman_30d <- cor.test(final_data$sentiment, final_data$return_30d, 
+                        method = "spearman", use = "complete.obs")
+
+tibble(
+  horizon = c("1-day", "7-day", "30-day"),
+  spearman_rho = c(spearman_1d$estimate, spearman_7d$estimate, spearman_30d$estimate),
+  p_value = c(spearman_1d$p.value, spearman_7d$p.value, spearman_30d$p.value)
+)
+```
+
+## Regression Models: Sentiment Predicting Returns
+
+```{r}
+# Linear regression: predict next-day return from sentiment
+model_1d <- lm(next_day_return ~ sentiment, data = final_data)
+summary(model_1d)
+tidy(model_1d)
+```
+
+```{r}
+# Linear regression: predict 7-day return from sentiment
+model_7d <- lm(return_7d ~ sentiment, data = final_data)
+summary(model_7d)
+tidy(model_7d)
+```
+
+```{r}
+# Linear regression: predict 30-day return from sentiment
+model_30d <- lm(return_30d ~ sentiment, data = final_data)
+summary(model_30d)
+tidy(model_30d)
+```
+
+## R² Comparison Across Horizons
+
+```{r}
+# Compare R² values across different time horizons
+r2_summary <- tibble(
+  horizon = c("1-day", "7-day", "30-day"),
+  r2 = c(summary(model_1d)$r.squared,
+         summary(model_7d)$r.squared,
+         summary(model_30d)$r.squared)
+)
+
+r2_summary
+```
+
+## Baseline Comparison Analysis
+
+This section compares tweet returns to baseline (random) returns to test whether tweets have a significant impact on price movements. The baseline serves as a control group, representing what returns would look like by chance.
+
+### Welch T-Tests: Tweet Returns vs Baseline
+
+```{r}
+# Perform Welch t-tests comparing tweet returns to baseline
+perform_baseline_tests <- function(returns_df) {
+  results <- list()
+  
+  for (horizon in unique(returns_df$horizon_hours)) {
+    for (meme_flag in c(TRUE, FALSE)) {
+      tweet_returns <- returns_df %>%
+        filter(horizon_hours == horizon,
+               is_meme_group == meme_flag,
+               !is_baseline) %>%
+        pull(return_pct)
+      
+      # Get baseline returns
+      baseline_returns <- returns_df %>%
+        filter(horizon_hours == horizon,
+               is_baseline) %>%
+        pull(return_pct)
+      
+      if (length(tweet_returns) < 2 || length(baseline_returns) < 2) {
+        next
+      }
+      
+      test_result <- t.test(tweet_returns, baseline_returns, var.equal = FALSE)
+      pooled_std <- sqrt(
+        ((length(tweet_returns) - 1) * var(tweet_returns) +
+         (length(baseline_returns) - 1) * var(baseline_returns)) /
+        (length(tweet_returns) + length(baseline_returns) - 2)
+      )
+      cohens_d <- (mean(tweet_returns) - mean(baseline_returns)) / pooled_std
+      mw_test <- wilcox.test(tweet_returns, baseline_returns, alternative = "two.sided")
+      
+      results[[length(results) + 1]] <- tibble(
+        horizon_hours = horizon,
+        horizon_days = horizon / 24,
+        is_meme_group = meme_flag,
+        sample_size = length(tweet_returns),
+        baseline_size = length(baseline_returns),
+        mean_return_pct = mean(tweet_returns) * 100,
+        baseline_mean_return_pct = mean(baseline_returns) * 100,
+        mean_diff_pct = (mean(tweet_returns) - mean(baseline_returns)) * 100,
+        t_statistic = test_result$statistic,
+        p_value = test_result$p.value,
+        cohens_d = cohens_d,
+        mannwhitney_p = mw_test$p.value
+      )
+    }
+  }
+  
+  if (length(results) == 0) {
+    return(tibble())
+  }
+  
+  bind_rows(results)
+}
+
+baseline_test_results <- perform_baseline_tests(all_returns)
+
+baseline_test_results
+```
+
+### Multiple Testing Correction
+
+```{r}
+# Apply multiple testing corrections
+n_comparisons <- nrow(baseline_test_results)
+bonferroni_alpha <- 0.05 / n_comparisons
+
+baseline_test_results <- baseline_test_results %>%
+  mutate(
+    p_value_bonferroni = p.adjust(p_value, method = "bonferroni"),
+    p_value_fdr = p.adjust(p_value, method = "fdr"),
+    significant_05_raw = p_value < 0.05,
+    significant_01_raw = p_value < 0.01,
+    significant_05_bonferroni = p_value_bonferroni < 0.05,
+    significant_05_fdr = p_value_fdr < 0.05
+  )
+
+```
+
+### Effect Size Interpretation and Confidence Intervals
+
+```{r}
+# Calculate effect sizes and confidence intervals
+baseline_test_results <- baseline_test_results %>%
+  mutate(
+    effect_size_interpretation = case_when(
+      abs(cohens_d) < 0.2 ~ "negligible",
+      abs(cohens_d) < 0.5 ~ "small",
+      abs(cohens_d) < 0.8 ~ "medium",
+      TRUE ~ "large"
+    ),
+    cohens_d_se = sqrt((sample_size + baseline_size) / (sample_size * baseline_size) + 
+                       cohens_d^2 / (2 * (sample_size + baseline_size - 2))),
+    cohens_d_ci_lower = cohens_d - 1.96 * cohens_d_se,
+    cohens_d_ci_upper = cohens_d + 1.96 * cohens_d_se,
+    mean_diff_se = abs(mean_diff_pct / 100) / abs(t_statistic),
+    mean_diff_ci_lower = mean_diff_pct - 1.96 * mean_diff_se * 100,
+    mean_diff_ci_upper = mean_diff_pct + 1.96 * mean_diff_se * 100
+  )
+
+baseline_test_results %>%
+  select(horizon_days, is_meme_group, mean_diff_pct, 
+         mean_diff_ci_lower, mean_diff_ci_upper,
+         cohens_d, cohens_d_ci_lower, cohens_d_ci_upper,
+         effect_size_interpretation, 
+         p_value, p_value_bonferroni, p_value_fdr,
+         significant_05_raw, significant_05_bonferroni, significant_05_fdr)
+```
+
+### Performance Indicators
+
+```{r}
+# Calculate performance indicators
+compute_performance_indicators <- function(returns_df) {
+  results <- list()
+  
+  for (horizon in unique(returns_df$horizon_hours)) {
+    for (meme_flag in c(TRUE, FALSE)) {
+      tweet_returns <- returns_df %>%
+        filter(horizon_hours == horizon,
+               is_meme_group == meme_flag,
+               !is_baseline) %>%
+        pull(return_pct)
+      
+      # Get baseline returns
+      baseline_returns <- returns_df %>%
+        filter(horizon_hours == horizon,
+               is_baseline) %>%
+        pull(return_pct)
+      
+      if (length(tweet_returns) < 2 || length(baseline_returns) < 2) {
+        next
+      }
+      
+      baseline_mean <- mean(baseline_returns)
+      
+      hit_rate <- mean(tweet_returns > 0)
+      outperform_prob <- mean(tweet_returns > baseline_mean)
+      volatility <- sd(tweet_returns)
+      baseline_vol <- sd(baseline_returns)
+      sharpe_like <- ifelse(volatility > 0, mean(tweet_returns) / volatility, NA_real_)
+      variance_ratio <- ifelse(baseline_vol > 0, volatility / baseline_vol, NA_real_)
+      
+      results[[length(results) + 1]] <- tibble(
+        horizon_hours = horizon,
+        horizon_days = horizon / 24,
+        is_meme_group = meme_flag,
+        count = length(tweet_returns),
+        hit_rate = hit_rate,
+        outperform_prob = outperform_prob,
+        sharpe_like = sharpe_like,
+        variance_ratio = variance_ratio,
+        volatility_pct = volatility * 100,
+        baseline_volatility_pct = baseline_vol * 100
+      )
+    }
+  }
+  
+  if (length(results) == 0) {
+    return(tibble())
+  }
+  
+  bind_rows(results)
+}
+
+performance_indicators <- compute_performance_indicators(all_returns)
+
+performance_indicators
+```
+
+### Baseline Comparison Summary Table
+
+```{r}
+# Create summary table combining test results and performance indicators
+baseline_summary <- baseline_test_results %>%
+  left_join(performance_indicators, 
+            by = c("horizon_hours", "horizon_days", "is_meme_group")) %>%
+  mutate(
+    group_label = ifelse(is_meme_group, "Meme Group", "Non-Meme Group"),
+    horizon_label = paste0(horizon_days, "d")
+  ) %>%
+  arrange(horizon_days, is_meme_group) %>%
+  select(horizon_label, group_label, sample_size, baseline_size,
+         mean_return_pct, baseline_mean_return_pct, 
+         mean_diff_pct, mean_diff_ci_lower, mean_diff_ci_upper,
+         p_value, p_value_bonferroni, p_value_fdr,
+         cohens_d, cohens_d_ci_lower, cohens_d_ci_upper,
+         effect_size_interpretation,
+         hit_rate, outperform_prob, sharpe_like, variance_ratio,
+         significant_05_raw, significant_05_bonferroni, significant_05_fdr)
+
+baseline_summary %>%
+  kable(caption = "Baseline Comparison Summary: Tweet Returns vs Baseline Returns", 
+        digits = 3) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), 
+                full_width = TRUE, position = "left") %>%
+  scroll_box(width = "100%", height = "400px")
+```
+
+### Power Analysis
+
+```{r}
+# Calculate statistical power and minimum detectable effect sizes for each comparison
+power_results <- baseline_test_results %>%
+  mutate(
+    power = map2_dbl(sample_size, abs(cohens_d), function(n, d) {
+      if (n < 2 || is.na(d) || is.infinite(d)) {
+        return(NA_real_)
+      }
+      tryCatch({
+        pwr_result <- pwr.t.test(n = min(n, baseline_size), 
+                                 d = d, 
+                                 sig.level = 0.05,
+                                 type = "two.sample",
+                                 alternative = "two.sided")
+        return(pwr_result$power)
+      }, error = function(e) return(NA_real_))
+    }),
+    # Calculate minimum detectable effect size
+    min_detectable_d = map_dbl(sample_size, function(n) {
+      if (n < 2) return(NA_real_)
+      tryCatch({
+        pwr_result <- pwr.t.test(n = min(n, baseline_size),
+                                 power = 0.80,
+                                 sig.level = 0.05,
+                                 type = "two.sample",
+                                 alternative = "two.sided")
+        return(pwr_result$d)
+      }, error = function(e) return(NA_real_))
+    })
+  )
+
+# Summary of power analysis
+power_summary <- power_results %>%
+  select(horizon_days, is_meme_group, sample_size, baseline_size,
+         cohens_d, power, min_detectable_d) %>%
+  mutate(
+    group_label = ifelse(is_meme_group, "Meme Group", "Non-Meme Group"),
+    power_interpretation = case_when(
+      power < 0.5 ~ "Low power",
+      power < 0.8 ~ "Moderate power",
+      TRUE ~ "Adequate power"
+    ),
+    detectable_interpretation = ifelse(abs(cohens_d) >= min_detectable_d,
+                                       "Detectable", "Below detection threshold")
+  )
+
+power_summary
+
+```
+
+## Negative Sentiment Event Study
+
+```{r}
+# Identify negative sentiment events (bottom 20% of sentiment scores)
+threshold <- quantile(final_data$sentiment, 0.20, na.rm = TRUE)
+
+negative_events <- final_data %>%
+  filter(sentiment <= threshold)
+
+```
+
+```{r}
+# Test if 7-day returns after negative sentiment tweets differ from zero
+t_test_negative <- t.test(negative_events$return_7d, mu = 0)
+t_test_negative
+```
+
+The one-sample t-test confirms that "negative events" generate a statistically significant positive return over a 7-day horizon, providing robust evidence for a contrarian trading strategy. The analysis yields a mean return of **4.27%**(p=0.0097), rejecting the null hypothesis that these returns are zero. The 95% confidence interval is entirely positive, ranging from **1.12% to 7.43%**, indicating that even in conservative scenarios, this signal creates value.
+
+This result is economically significant because it identifies a structural "mean reversion" or "oversold" opportunity. While intuition might suggest that negative news or sentiment should drive prices down, the data shows the opposite: these events likely mark periods of peak fear or capitulation, which are followed by a recovery. Consequently, acting on these negative signals as entry points (Long positions) has historically provided a statistically reliable edge of roughly 4% per trade over the following week.
+
+## Volatility Analysis: Tweet Volume vs Volatility
+
+```{r}
+# Analyze relationship between tweet volume and price volatility
+volatility_data <- final_data %>%
+  mutate(volatility = abs(change_pct)) %>%
+  group_by(createdAt) %>%
+  summarise(
+    tweet_volume = n(),
+    mean_sentiment = mean(sentiment, na.rm = TRUE),
+    volatility = first(volatility),
+    .groups = "drop"
+  ) %>%
+  filter(!is.na(volatility))
+
+model_volatility <- lm(volatility ~ tweet_volume, data = volatility_data)
+summary(model_volatility)
+tidy(model_volatility)
+```
+
+```{r}
+# Visualize relationship between tweet volume and volatility
+volatility_data %>%
+  ggplot(aes(x = tweet_volume, y = volatility)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = TRUE) +
+  labs(title = "Tweet Volume vs DOGE Volatility",
+       x = "Tweets per Day", y = "Daily Volatility (%)") +
+  theme_minimal()
+```
+
+The regression analysis suggests a tentative positive correlation between social media activity and asset risk, where days with higher tweet frequency are associated with marginally higher price instability. The trend line indicates that as daily tweet volume increases from one to four, the average daily volatility drifts upward from a baseline of approximately 4.5% to nearly 6%. This aligns with the broader market hypothesis that increased retail attention often exacerbates price variance.
+
+However, the statistical reliability of this trend is severely limited by the sparsity of high-volume days. The vast majority of observations cluster at the single-tweet level, where volatility varies wildly (ranging from 0% to 14%), implying that for low-activity days, tweet count is a poor predictor of risk. The widening confidence interval (gray shaded area) further confirms that the sample size for multi-tweet days is insufficient to establish a robust causal link, suggesting the upward trend may be influenced by a few specific outlier events rather than a consistent pattern.
+
+## Daily Aggregation Analysis
+
+```{r}
+# Aggregate tweet metrics by day and merge with price data
+daily_tweet_stats <- final_data %>%
+  group_by(createdAt) %>%
+  summarise(
+    mean_sentiment = mean(sentiment, na.rm = TRUE),
+    tweet_volume = n(),
+    .groups = "drop"
+  )
+
+daily_merged <- price_data %>%
+  left_join(daily_tweet_stats, by = c("Date" = "createdAt")) %>%
+  filter(!is.na(mean_sentiment))
+
+head(daily_merged)
+```
+
+## Regression Models with Multiple Predictors
+
+```{r}
+# Multiple regression: predict next-day return from sentiment and tweet volume
+model_multi_1d <- lm(next_day_return ~ mean_sentiment + tweet_volume, 
+                    data = daily_merged)
+summary(model_multi_1d)
+tidy(model_multi_1d)
+```
+
+```{r}
+# Multiple regression: predict 7-day return from sentiment and tweet volume
+model_multi_7d <- lm(return_7d ~ mean_sentiment + tweet_volume, 
+                    data = daily_merged)
+summary(model_multi_7d)
+tidy(model_multi_7d)
+```
+
+```{r}
+# Multiple regression: predict 30-day return from sentiment and tweet volume
+model_multi_30d <- lm(return_30d ~ mean_sentiment + tweet_volume, 
+                     data = daily_merged)
+summary(model_multi_30d)
+tidy(model_multi_30d)
+```
+
+## Model Comparison Summary
+
+```{r}
+# Compare regression coefficients and R squared across different time horizons
+model_summary <- bind_rows(
+  tidy(model_multi_1d) %>% mutate(model = "1-day"),
+  tidy(model_multi_7d) %>% mutate(model = "7-day"),
+  tidy(model_multi_30d) %>% mutate(model = "30-day")
+)
+
+r2_summary_multi <- tibble(
+  model = c("1-day", "7-day", "30-day"),
+  r2 = c(glance(model_multi_1d)$r.squared,
+         glance(model_multi_7d)$r.squared,
+         glance(model_multi_30d)$r.squared)
+)
+
+model_summary
+r2_summary_multi
+```
+
+## Visualizations
+
+### Sentiment vs Returns Visualization
+
+```{r, fig.cap="Relationship between tweet sentiment and next-day DOGE returns."}
+# Visualize relationship between sentiment and next-day returns
+final_data %>%
+  ggplot(aes(x = sentiment, y = next_day_return)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = TRUE) +
+  labs(title = "Sentiment vs Next-Day Returns",
+       x = "Sentiment Score", y = "Next-Day Return (%)") +
+  theme_minimal()
+```
+
+The scatter plot reveals a **weak negative relationship** between Sentiment Score and Next-Day Returns, further supporting the "contrarian" hypothesis. The regression line (blue) slopes slightly downward, indicating that as the sentiment score increases (tweets become more positive), the next-day return tends to decrease. This visually aligns with the "sell the hype" phenomenon, where extreme positivity often precedes a price correction or underperformance.
+
+However, the predictive power of this signal is low for the 1-day horizon. The data points are widely scattered around the trend line, and the confidence interval (gray shaded area) is broad and encompasses the zero-return line. This confirms the earlier statistical finding (p-value = 0.38) that while the *direction* is contrarian (higher sentiment = lower return), the signal is too noisy to be a standalone reliable indicator for day trading. The value of sentiment appears to be in identifying extreme outliers (e.g., Sentiment \> 8) rather than acting on minor score differences.
+
+### Correlation by Horizon Visualization
+
+```{r, fig.cap="Correlation between sentiment and DOGE returns across time horizons."}
+# Visualize correlation coefficients across different time horizons
+corr_summary %>%
+  ggplot(aes(x = horizon, y = correlation)) +
+  geom_col() +
+  labs(title = "Sentiment-Return Correlation by Horizon",
+       x = "Time Horizon", y = "Correlation") +
+  theme_minimal()
+```
+
+The chart reveals a distinct time-dependent reversal in the relationship between sentiment and asset returns. In the short term, sentiment acts as a **contrarian indicator**, evidenced by negative correlations at the 1-day and particularly the 7-day horizons, which suggests that high sentiment initially triggers market overreaction followed by a corrective mean reversion. However, this relationship flips over the **30-day horizon**, where the positive correlation indicates that once short-term noise dissipates, sustained sentiment correctly aligns with the asset's fundamental momentum and price appreciation.
+
+# Bitcoin Analysis
+
+This section analyzes the relationship between Elon Musk's Bitcoin-related tweets and Bitcoin (BTC) price movements, using a similar methodology to the Dogecoin analysis.
+
+## Bitcoin Data Loading and Preparation
+
+```{r}
+# Load Bitcoin price data from CSV
+btc_data <- read_csv("../data/processed/BTC_USD_data_2013_to_present.csv") %>%
+  mutate(date = as.Date(date))
+
+# Calculate returns
+btc_data <- btc_data %>%
+  arrange(date) %>%
+  mutate(
+    change_usd = c(NA, diff(close)),
+    change_pct = c(NA, (diff(close) / head(close, -1)) * 100),
+    next_day_return = lead(close, 1) / close - 1,
+    return_7d = lead(close, 7) / close - 1,
+    return_30d = lead(close, 30) / close - 1
+  )
+```
+
+## Bitcoin Tweet Filtering and Merging
+
+```{r}
+# Filter Bitcoin tweets
+bitcoin_tweets <- sentiment_data %>%
+  filter(category == "Bitcoin") %>%
+  select(tweet_id, createdAt, sentiment) %>%
+  mutate(createdAt = as.Date(createdAt))
+
+# Merge Bitcoin tweets with BTC price data
+btc_full <- btc_data %>%
+  left_join(bitcoin_tweets, by = c("date" = "createdAt"))
+
+# Create analysis dataset with only tweets that have price data
+btc_tweet_effects <- btc_full %>%
+  filter(!is.na(sentiment))
+
+nrow(btc_tweet_effects)
+```
+
+## Bitcoin Correlation Analysis
+
+```{r}
+# Calculate correlations at different horizons
+btc_cor_1d <- cor.test(btc_tweet_effects$sentiment, btc_tweet_effects$next_day_return, use = "complete.obs")
+btc_cor_7d <- cor.test(btc_tweet_effects$sentiment, btc_tweet_effects$return_7d, use = "complete.obs")
+btc_cor_30d <- cor.test(btc_tweet_effects$sentiment, btc_tweet_effects$return_30d, use = "complete.obs")
+
+btc_corr_summary <- tibble(
+  horizon = c("1-day", "7-day", "30-day"),
+  correlation = c(btc_cor_1d$estimate, btc_cor_7d$estimate, btc_cor_30d$estimate),
+  p_value = c(btc_cor_1d$p.value, btc_cor_7d$p.value, btc_cor_30d$p.value)
+)
+
+btc_corr_summary
+```
+
+## Bitcoin Regression Models
+
+```{r}
+# Simple regression models: return ~ sentiment
+btc_model_1d <- lm(next_day_return ~ sentiment, data = btc_tweet_effects)
+btc_model_7d <- lm(return_7d ~ sentiment, data = btc_tweet_effects)
+btc_model_30d <- lm(return_30d ~ sentiment, data = btc_tweet_effects)
+
+summary(btc_model_1d)
+tidy(btc_model_1d)
+
+summary(btc_model_7d)
+tidy(btc_model_7d)
+
+summary(btc_model_30d)
+tidy(btc_model_30d)
+```
+
+## Bitcoin Hypothesis Testing
+
+### H1: Sentiment and Next-Day Returns
+
+```{r}
+# H1: Test if sentiment predicts next-day BTC returns
+btc_cor_test_H1 <- cor.test(btc_tweet_effects$sentiment, btc_tweet_effects$next_day_return)
+btc_cor_test_H1
+```
+
+The statistical output for Bitcoin (BTC) indicates that there is **no significant correlation** between tweet sentiment and next-day returns. The high p-value (0.2176) means the slight positive correlation observed (0.12) is indistinguishable from random noise, and the confidence interval crossing zero confirms that tweet sentiment is not a reliable predictor for immediate price action in this dataset.
+
+### H2: Negative Sentiment Events
+
+```{r}
+# H2: Test if negative sentiment tweets predict 7-day returns
+btc_threshold <- quantile(btc_tweet_effects$sentiment, 0.20, na.rm = TRUE)
+btc_negative_events <- btc_tweet_effects %>%
+  filter(sentiment <= btc_threshold)
+
+btc_t_test_H2 <- t.test(btc_negative_events$return_7d, mu = 0)
+btc_t_test_H2
+```
+
+The analysis of 7-day Bitcoin returns following negative events indicates a **marginally significant positive trend**, characterized by an average gain of approximately **2.3%**, which suggests that the market often recovers or ignores the negative news over a weekly horizon. However, since the p-value (0.06) slightly exceeds the standard 0.05 threshold and the confidence interval briefly crosses into negative territory, this finding is not statistically definitive; while it strongly hints at a "buy the dip" dynamic or resilience to bad news, we cannot statistically rule out the possibility that these positive returns are simply due to random chance.
+
+### H3: Tweet Volume and Volatility
+
+```{r}
+# H3: Test if tweet volume relates to BTC volatility
+btc_tweet_volume <- btc_tweet_effects %>%
+  group_by(date) %>%
+  summarise(tweet_volume = n(), .groups = "drop")
+
+btc_volatility_data <- btc_tweet_effects %>%
+  select(date, change_pct) %>%
+  distinct() %>%
+  mutate(volatility = abs(change_pct)) %>%
+  left_join(btc_tweet_volume, by = "date") %>%
+  filter(!is.na(tweet_volume))
+
+btc_model_H3 <- lm(volatility ~ tweet_volume, data = btc_volatility_data)
+summary(btc_model_H3)
+tidy(btc_model_H3)
+```
+
+The regression output indicates that **tweet volume is not a statistically significant predictor** for the target variable (likely BTC returns), as the p-value of **0.148** is well above the standard 0.05 threshold. Although the positive coefficient estimate (1.04) suggests a potential link where higher chatter accompanies higher values, the high p-value means this relationship is indistinguishable from random noise, implying that pure volume of discussion—without accounting for sentiment—does not reliably forecast market movement in this dataset.
+
+### H4: Sentiment Effects Over Time
+
+```{r}
+# H4: Compare R² across horizons to test if effects weaken over time
+btc_r2_summary <- tibble(
+  horizon = c("1-day", "7-day", "30-day"),
+  r2 = c(summary(btc_model_1d)$r.squared,
+         summary(btc_model_7d)$r.squared,
+         summary(btc_model_30d)$r.squared)
+)
+
+btc_r2_summary
+```
+
+The combined analysis of the R2 values and regression coefficients reveals that the model possesses **negligible explanatory power** regarding Bitcoin returns. The R2 table highlights a remarkably weak relationship, where the model explains less than **1.5%** of the variance in returns at the 1-day horizon (R2≈0.0144) and deteriorates further over longer timeframes, dropping to a trivial **0.6%** (R2≈0.0059) for the 30-day horizon. Furthermore, the regression output confirms that `tweet_volume` is **statistically insignificant** (p≈0.148), implying that neither the sentiment nor the volume of social media activity serves as a reliable predictor for price movements in this dataset, and any observed patterns are likely dominated by random market noise.
+
+## Bitcoin Daily Aggregation Analysis
+
+```{r}
+# Aggregate Bitcoin tweets by day
+btc_daily_stats <- btc_tweet_effects %>%
+  group_by(date) %>%
+  summarise(
+    mean_sentiment = mean(sentiment, na.rm = TRUE),
+    tweet_volume = n(),
+    .groups = "drop"
+  )
+
+# Merge with BTC price data
+btc_daily_merged <- btc_data %>%
+  left_join(btc_daily_stats, by = "date") %>%
+  filter(!is.na(mean_sentiment))
+```
+
+## Bitcoin Multiple Regression Models
+
+```{r}
+# Multiple regression: return ~ sentiment + tweet_volume
+btc_model_multi_1d <- lm(next_day_return ~ mean_sentiment + tweet_volume, data = btc_daily_merged)
+btc_model_multi_7d <- lm(return_7d ~ mean_sentiment + tweet_volume, data = btc_daily_merged)
+btc_model_multi_30d <- lm(return_30d ~ mean_sentiment + tweet_volume, data = btc_daily_merged)
+
+summary(btc_model_multi_1d)
+tidy(btc_model_multi_1d)
+
+summary(btc_model_multi_7d)
+tidy(btc_model_multi_7d)
+
+summary(btc_model_multi_30d)
+tidy(btc_model_multi_30d)
+```
+
+## Bitcoin Model Comparison
+
+```{r}
+# Compare coefficients and R² across models
+btc_model_summary <- bind_rows(
+  tidy(btc_model_multi_1d) %>% mutate(model = "1-day"),
+  tidy(btc_model_multi_7d) %>% mutate(model = "7-day"),
+  tidy(btc_model_multi_30d) %>% mutate(model = "30-day")
+)
+
+btc_r2_summary_multi <- tibble(
+  model = c("1-day", "7-day", "30-day"),
+  r2 = c(glance(btc_model_multi_1d)$r.squared,
+         glance(btc_model_multi_7d)$r.squared,
+         glance(btc_model_multi_30d)$r.squared)
+)
+
+btc_model_summary
+btc_r2_summary_multi
+```
+
+## Bitcoin Visualizations
+
+```{r, fig.cap="Relationship between tweet sentiment and next-day BTC returns."}
+# Visualize sentiment vs BTC returns
+btc_tweet_effects %>%
+  ggplot(aes(x = sentiment, y = next_day_return)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = TRUE) +
+  labs(title = "Sentiment vs Next-Day BTC Returns",
+       x = "Sentiment Score", y = "Next-Day Return (%)") +
+  theme_minimal()
+```
+
+The comprehensive analysis of the provided visuals and tables demonstrates that **neither sentiment scores nor tweet volume** serve as reliable predictors for Bitcoin returns. The scatter plot illustrates a highly dispersed, noisy relationship between sentiment and next-day returns, visually reinforced by a regression line with a nearly flat slope and wide confidence intervals. This lack of predictive signal is quantitatively confirmed by the regression output, where `tweet_volume` proves statistically insignificant (p≈0.148), and the R2 table, which reveals that the model explains a trivial amount of variance—peaking at just **1.4%** for the 1-day horizon and dropping to **0.5%** by 30 days. Consequently, the data suggests that social media metrics are effectively uncorrelated with Bitcoin's market performance in this sample, with price movements appearing statistically random relative to these inputs.
+
+```{r, fig.cap="Correlation between sentiment and BTC returns across time horizons."}
+# Visualize correlation by horizon
+btc_corr_summary %>%
+  ggplot(aes(x = horizon, y = correlation)) +
+  geom_col() +
+  labs(title = "Sentiment-Return Correlation by Horizon (BTC)",
+       x = "Time Horizon", y = "Correlation") +
+  theme_minimal()
+```
+
+The comprehensive analysis of the provided visuals and tables demonstrates that **neither sentiment scores nor tweet volume** serve as reliable predictors for Bitcoin returns. The scatter plot illustrates a highly dispersed, noisy relationship between sentiment and next-day returns, visually reinforced by a regression line with a nearly flat slope and wide confidence intervals. This lack of predictive signal is quantitatively confirmed by the regression output, where `tweet_volume` proves statistically insignificant (p≈0.148), and the R2 table, which reveals that the model explains a trivial amount of variance—peaking at just **1.4%** for the 1-day horizon and dropping to **0.5%** by 30 days. Consequently, the data suggests that social media metrics are effectively uncorrelated with Bitcoin's market performance in this sample, with price movements appearing statistically random relative to these inputs.
+
+```{r, fig.cap="Relationship between tweet volume and BTC volatility."}
+# Visualize tweet volume vs volatility
+btc_volatility_data %>%
+  ggplot(aes(x = tweet_volume, y = volatility)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = TRUE) +
+  labs(title = "Tweet Volume vs BTC Volatility",
+       x = "Tweets per Day", y = "Daily Volatility (%)") +
+  theme_minimal()
+```
+
+The comprehensive analysis of the provided visuals and tables demonstrates that **neither sentiment scores nor tweet volume** serve as reliable predictors for Bitcoin returns or volatility in this dataset. The scatter plots illustrate highly dispersed, noisy relationships, visually reinforced by regression lines with wide confidence intervals and nearly flat slopes. This lack of predictive signal is quantitatively confirmed by the regression output, where `tweet_volume` proves statistically insignificant (p≈0.148), and the R2 table, which reveals that the model explains a trivial amount of variance—peaking at just **1.4%** for the 1-day horizon and dropping to roughly **0.6%** by 30 days. Consequently, the data suggests that these specific social media metrics are effectively uncorrelated with Bitcoin's market performance here, implying that price movements are statistically independent of these input features.
+
+```{r, fig.cap="Bitcoin sentiment scores over time."}
+# Visualize Bitcoin sentiment over time
+btc_tweet_effects %>%
+  ggplot(aes(x = date, y = sentiment)) +
+  geom_line(color = "steelblue", alpha = 0.6) +
+  labs(title = "Bitcoin Tweet Sentiment Over Time",
+       x = "Date", y = "Sentiment Score") +
+  theme_minimal()
+```
+
+The comprehensive analysis of the provided visuals and tables demonstrates that **neither sentiment scores nor tweet volume** serve as reliable predictors for Bitcoin returns or volatility in this dataset. The scatter plots illustrate highly dispersed, noisy relationships, visually reinforced by regression lines with wide confidence intervals and nearly flat slopes. This lack of predictive signal is quantitatively confirmed by the regression output, where `tweet_volume` proves statistically insignificant (p≈0.148), and the R2 table, which reveals that the model explains a trivial amount of variance—peaking at just **1.4%** for the 1-day horizon and dropping to roughly **0.6%** by 30 days. Consequently, the data suggests that these specific social media metrics are effectively uncorrelated with Bitcoin's market performance here, implying that price movements are statistically independent of these input features.
+
+## Bitcoin Findings Summary
+
+```{r}
+# Create summary table of Bitcoin hypothesis tests
+btc_hypothesis_summary <- tibble(
+  Hypothesis = c("H1", "H2", "H3", "H4"),
+  Description = c("Sentiment predicts next-day returns",
+                  "Negative sentiment predicts 7-day returns",
+                  "Tweet volume relates to volatility",
+                  "Sentiment effects weaken over time"),
+  Test_Result = c(
+    paste0("Correlation = ", round(btc_cor_test_H1$estimate, 3), ", p = ", round(btc_cor_test_H1$p.value, 4)),
+    paste0("7-day return t-test p = ", round(btc_t_test_H2$p.value, 4)),
+    paste0("Volatility regression p = ", signif(summary(btc_model_H3)$coefficients[2,4], 3)),
+    paste0("R² decreases: 1-day (", round(summary(btc_model_1d)$r.squared, 3), ") to 7-day (", round(summary(btc_model_7d)$r.squared, 3), ") to 30-day (", round(summary(btc_model_30d)$r.squared, 3), ")")
+  )
+)
+
+btc_hypothesis_summary
+```
+
+# Results Summary
+
+This section consolidates key findings from all analyses conducted in this study.
+
+## Comprehensive Findings Summary
+
+### Baseline Comparison Findings
+
+The baseline comparison analysis reveals several important findings:
+
+1.  **Meme Group Outperformance**: Meme group tweets show significant outperformance compared to baseline returns at 3-day and 7-day horizons, with large effect sizes. However, after Bonferroni correction for multiple testing, these findings should be interpreted with caution.
+
+2.  **Non-Meme Group Performance**: Non-meme group tweets show significant underperformance at 7-day horizon, which is an interesting finding that warrants further investigation.
+
+3.  **Effect Sizes**: The meme group demonstrates medium to large effect sizes (Cohen's d \> 0.5) at longer horizons, indicating substantial practical significance. Confidence intervals for effect sizes help quantify uncertainty.
+
+4.  **Performance Metrics**: Meme group tweets show higher hit rates (positive return rates) and outperform probabilities compared to baseline, particularly at 7-day horizons.
+
+5.  **Statistical Power**: Power analysis reveals limitations in detecting smaller effects given the sample size. Some comparisons may have low statistical power.
+
+6.  **Multiple Testing**: When conducting multiple comparisons, the risk of false positives increases. Bonferroni and FDR corrections help control this risk, though they may be conservative with small samples.
+
+### Category-Based Analysis Findings
+
+From the statistical tests on different tweet categories:
+
+1.  **Meme Ethereum/Smart Contracts**: The only finding that meets both statistical and practical significance criteria (p \< 0.05, \|Cohen's d\| \> 0.2) for 7-day returns in the Meme category.
+
+2.  **Multiple Testing Impact**: After correction for 30 tests (6 configurations \* 5 categories), most findings lose statistical significance, highlighting the importance of multiple testing correction.
+
+3.  **Effect Size Distribution**: Most statistically significant findings have negligible effect sizes (\|Cohen's d\| \< 0.2), indicating statistical significance without practical meaning.
+
+### Sentiment Analysis Findings
+
+1.  **Weak Correlations**: Sentiment scores show weak correlations with returns across all horizons (\|r\| \< 0.3), suggesting limited predictive power.
+
+2.  **Regression Models**: Sentiment explains minimal variance in returns (R² \< 0.1), indicating that sentiment alone is not a strong predictor.
+
+3.  **Temporal Patterns**: No clear pattern emerges across different time horizons, suggesting sentiment effects are not consistent.
+
+### All-Tweets Analysis Findings
+
+1.  **Large-Scale Patterns**: Analysis of \~20,000 tweets reveals broader patterns across categories, with some categories showing distinct return distributions.
+
+2.  **Category Differences**: Different tweet categories (Doge Coin, Alt coins, Ethereum, etc.) show varying return patterns when classified by Meme/Relevant/Other.
+
+### Bitcoin Analysis Findings
+
+1.  **Weak Sentiment Effects:** Correlation between sentiment and next-day Bitcoin returns is positive but very weak (r≈0.12) and not statistically significant (p>0.05), indicating sentiment does not meaningfully predict short-term BTC returns.
+2.  **Negative Sentiment Events:** Average 7-day return after negative-sentiment tweets is positive (∼2.3%) but the result is **marginally non-significant** (p≈0.06), providing weak and inconclusive evidence.
+3.  **Tweet Volume and Volatility:** Tweet volume shows a **tentative positive relationship** with BTC volatility (R2≈0.014), but this relationship is **not statistically significant** (p≈0.148). This indicates that while there is an observed trend, tweet volume is not a reliable predictor of volatility in this dataset.
+4.  **Temporal Decay:** R2 values decrease from 1-day to 7-day to 30-day horizons, showing that any sentiment influence is short-lived and quickly fades over time.
+5.  **Multiple Regression Models:** Models incorporating both sentiment and tweet volume explain minimal variance (R2<0.1), with tweet volume showing some predictive power at longer horizons (30-day) but sentiment remaining insignificant.
+
+```{r}
+# Extract significant findings with and without multiple testing correction
+significant_findings_raw <- baseline_summary %>%
+  filter(significant_05_raw == TRUE) %>%
+  select(horizon_label, group_label, mean_diff_pct, p_value, cohens_d, 
+         effect_size_interpretation, hit_rate, outperform_prob)
+
+significant_findings_corrected <- baseline_summary %>%
+  filter(significant_05_bonferroni == TRUE) %>%
+  select(horizon_label, group_label, mean_diff_pct, p_value, p_value_bonferroni, 
+         cohens_d, effect_size_interpretation, hit_rate, outperform_prob)
+
+if (nrow(significant_findings_raw) > 0) {
+  significant_findings_raw
+}
+
+if (nrow(significant_findings_corrected) > 0) {
+  significant_findings_corrected
+}
+```
+
+## Final Summary Statistics
+
+```{r}
+# Create final summary table of key metrics
+final_summary <- tibble(
+  Metric = c("Total Tweets", "Tweets with Price Data", 
+             "Mean Sentiment", "Mean 1-Day Return", "Mean 7-Day Return", "Mean 30-Day Return"),
+  Value = c(
+    nrow(cleaned_tweets),
+    nrow(final_data),
+    round(mean(final_data$sentiment, na.rm = TRUE), 3),
+    round(mean(final_data$next_day_return, na.rm = TRUE), 4),
+    round(mean(final_data$return_7d, na.rm = TRUE), 4),
+    round(mean(final_data$return_30d, na.rm = TRUE), 4)
+  )
+)
+
+final_summary %>%
+  kable(caption = "Final Summary Statistics") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), 
+                full_width = FALSE, position = "left")
+```
+
+## Limitations and Statistical Considerations
+
+### Sample Size Limitations
+
+-   **Small Sample Size**: With only 58 tweets (27 meme, 31 non-meme), statistical power is limited
+-   **Low Power**: Power analysis shows that many comparisons have insufficient power to detect moderate effect sizes
+-   **Generalizability**: Results may not generalize to broader populations of tweets
+
+### Multiple Testing
+
+-   **Multiple Comparisons**: We conducted 6 baseline comparisons plus 3 correlation tests, increasing the risk of false positives
+-   **Correction Methods**: Bonferroni correction is conservative but appropriate for controlling family-wise error rate
+-   **FDR Alternative**: False Discovery Rate (FDR) correction provides a less conservative alternative
+
+### Interpretation Caveats
+
+-   **Effect Size Uncertainty**: Confidence intervals for effect sizes are wide, reflecting sample size limitations
+-   **Baseline Matching**: Baseline samples are randomly selected but may not perfectly match market conditions at tweet times
+-   **Causality**: These analyses show associations, not causation. Many confounding factors may influence results
+
+### Recommendations for Future Research
+
+1.  **Larger Sample Size**: Collect more tweets to increase statistical power
+2.  **Matched Baseline**: Match baseline dates to tweet dates to control for market conditions
+3.  **Time-Series Analysis**: Consider time-series methods to account for temporal dependencies
+4.  **Replication**: Replicate findings with independent datasets
+5.  **Causal Inference**: Use methods like instrumental variables or natural experiments to establish causality
+
+# Discussion
+
+## Interpretation of Findings
+
+### Statistical vs. Practical Significance
+
+A key finding of this analysis is the distinction between statistical and practical significance. While several comparisons show statistical significance (p \< 0.05) before correction, most have negligible effect sizes (\|Cohen's d\| \< 0.2). This highlights the importance of reporting and interpreting effect sizes alongside p-values, as statistical significance alone does not indicate meaningful real-world impact.
+
+The one finding that meets both criteria—Meme Ethereum/smart contracts 7-day returns—warrants further investigation but should be interpreted cautiously given: - The small sample size (n = 3) - The multiple testing context (30 tests conducted) - The need for independent replication
+
+### Multiple Testing Correction Impact
+
+The application of multiple testing correction (Bonferroni and FDR) dramatically changes the interpretation of results. Most findings that appear significant without correction lose significance after correction, demonstrating the critical importance of accounting for multiple comparisons. This is particularly relevant in exploratory analyses where many hypotheses are tested simultaneously.
+
+### Sample Size and Power Considerations
+
+With only 58 tweets in the main analysis (27 meme, 31 non-meme), statistical power is limited. Power analysis reveals that many comparisons have insufficient power to detect moderate effect sizes. This means that: - Non-significant results may reflect low power rather than true null effects - Significant results, when they occur, may be driven by large effect sizes or chance - Generalizability to broader populations is uncertain
+
+### Baseline Comparison Framework
+
+The baseline comparison approach provides a useful framework for testing whether tweet returns differ from random chance. However, the random baseline may not perfectly control for: - Market conditions at the time of tweets - Temporal trends in cryptocurrency markets - External events affecting prices
+
+Future research could improve this by matching baseline dates to tweet dates or using more sophisticated control group designs.
+
+### Sentiment Analysis Limitations
+
+The weak correlations between sentiment and returns suggest that sentiment scores alone are not strong predictors of price movements. This could reflect: - Limitations in sentiment measurement methodology - The complexity of factors affecting cryptocurrency prices - The need for more sophisticated sentiment analysis approaches
+
+### Category-Based Patterns
+
+The all-tweets analysis reveals interesting patterns across categories, with some categories showing distinct return distributions. However, the large number of categories and the exploratory nature of this analysis require cautious interpretation. The finding that Meme Ethereum/smart contracts shows both statistical and practical significance is intriguing but requires validation with larger samples.
+
+## Implications
+
+### For Research
+
+This analysis demonstrates the importance of: 1. Rigorous statistical methodology (multiple testing correction, effect sizes) 2. Appropriate interpretation of results given sample size constraints 3. Distinguishing between statistical and practical significance 4. Transparent reporting of limitations
+
+### For Practice
+
+While this analysis does not provide strong evidence for actionable trading strategies, it does suggest: 1. Different tweet categories may have differential impacts 2. Effects, if they exist, may be small and difficult to detect 3. Multiple factors beyond sentiment influence price movements 4. Careful statistical analysis is needed to avoid false discoveries
+
+## Strengths of This Analysis
+
+1.  **Rigorous Methodology**: Use of event study framework, baseline comparison, and appropriate statistical tests
+2.  **Multiple Testing Correction**: Application of both Bonferroni and FDR corrections
+3.  **Effect Size Reporting**: Calculation and interpretation of Cohen's d
+4.  **Comprehensive Analysis**: Examination of multiple time horizons, categories, and metrics
+5.  **Transparency**: Clear reporting of limitations and methodological choices
+
+## Limitations
+
+1.  **Sample Size**: Small sample (58 tweets) limits statistical power and generalizability
+2.  **Causality**: Observational design cannot establish causation
+3.  **Confounding**: Many unmeasured factors may influence results
+4.  **Temporal Dependencies**: Analysis does not fully account for time-series dependencies
+5.  **Baseline Matching**: Random baseline may not perfectly control for market conditions
+
+# Conclusion
+
+This analysis examined the relationship between tweets and Dogecoin price movements using rigorous statistical methodology. Key findings include:
+
+1.  **Limited Evidence of Impact**: After appropriate multiple testing correction, there is limited evidence that tweets have statistically significant impacts on Dogecoin prices beyond what would be expected by chance.
+
+2.  **Practical Significance**: Most statistically significant findings have negligible effect sizes, highlighting the importance of distinguishing statistical from practical significance.
+
+3.  **Category Differences**: Some tweet categories show distinct patterns, though these findings require validation with larger samples.
+
+4.  **Sentiment Limitations**: Sentiment scores show weak correlations with returns, suggesting limited predictive power.
+
+5.  **Methodological Contributions**: This analysis demonstrates the importance of rigorous statistical methodology, including multiple testing correction, effect size reporting, and appropriate interpretation given sample size constraints.
+
+## Future Directions
+
+Future research should:
+
+1.  **Increase Sample Size**: Collect larger samples to improve statistical power and generalizability
+2.  **Improve Baseline Matching**: Use matched baseline designs to better control for market conditions
+3.  **Time-Series Methods**: Apply time-series analysis to account for temporal dependencies
+4.  **Causal Inference**: Use methods like instrumental variables or natural experiments to establish causality
+5.  **Replication**: Replicate findings with independent datasets
+6.  **Advanced Sentiment Analysis**: Explore more sophisticated sentiment analysis approaches
+7.  **Multi-Factor Models**: Develop models incorporating multiple factors beyond sentiment
+
+## Final Thoughts
+
+While this analysis does not provide strong evidence for significant tweet impacts on Dogecoin prices, it demonstrates the importance of rigorous statistical methodology in analyzing financial data. The careful application of multiple testing correction, effect size reporting, and appropriate interpretation given sample size constraints provides a framework for future research in this area.
+
+The distinction between statistical and practical significance, the impact of multiple testing correction, and the limitations of small sample sizes are important lessons for both researchers and practitioners analyzing financial data.
+
+# Appendix
+
+## Session Information
+
+```{r, echo=FALSE}
+# Session information for reproducibility
+sessionInfo()
+```
+
+## Reproducibility Notes
+
+-   **R Version**: See session information above
+-   **Random Seed**: 42 (for baseline generation)
+-   **Data Sources**:
+    -   `sentiment_classified.csv`
+    -   `doge_daily_10years.csv`
+    -   `BTC_USD_data_2013_to_present.csv` (Bitcoin price data from Yahoo Finance)
+-   **Analysis Date**: `r Sys.Date()`

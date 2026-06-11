@@ -1,0 +1,37 @@
+# ---- R / RStudio ----
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+.Rapp.history
+*_cache/
+
+# ---- Quarto / knitr build artifacts ----
+/.quarto/
+*.html
+*_files/
+!reports/figures/
+/analysis/*.html
+
+# ---- LaTeX build artifacts ----
+*.aux
+*.log
+*.out
+*.synctex.gz
+*.toc
+*.fls
+*.fdb_latexmk
+
+# ---- Large / raw data (kept locally, not committed) ----
+# These raw scrapes are large; see data/README.md for provenance and how to obtain them.
+data/raw/
+
+# ---- OS / editor cruft ----
+.DS_Store
+Thumbs.db
+*~
+.idea/
+.vscode/
+
+# ---- Agent / tooling state ----
+.claude/

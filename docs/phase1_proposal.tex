@@ -1,0 +1,94 @@
+\documentclass[12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+\geometry{margin=1in}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{setspace}
+\setstretch{1.2}
+
+\title{Project Proposal: Analyzing the Impact of Elon Musk's Tweets on Cryptocurrency Prices using R}
+\author{Your Name}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section*{Dataset Identification}
+
+For this project, I plan to use two datasets:
+
+\begin{enumerate}[label=\arabic*.]
+    \item \textbf{Cryptocurrency Price Data:}  
+    This dataset contains historical price information for multiple cryptocurrencies, retrieved from Yahoo Finance using the \texttt{yfinance} Python library (data will be exported as CSV and imported into R). The dataset spans several years and contains approximately 50,000 daily records for selected cryptocurrencies such as Bitcoin (BTC) and Ethereum (ETH). Each record contains the following columns:
+    \begin{itemize}
+        \item \texttt{Date} (Date/Time)
+        \item \texttt{Open} (Numerical)
+        \item \texttt{High} (Numerical)
+        \item \texttt{Low} (Numerical)
+        \item \texttt{Close} (Numerical)
+        \item \texttt{Adj Close} (Numerical)
+        \item \texttt{Volume} (Numerical)
+    \end{itemize}
+    This dataset will be used in R to calculate returns, volatility, and other price-related metrics.
+
+    \item \textbf{Elon Musk Tweets:}  
+    This dataset consists of Elon Musk's tweets collected over the same time period, with approximately 10,000 records. Each record contains:
+    \begin{itemize}
+        \item \texttt{createdAt} (Date/Time)
+        \item \texttt{fullText} (Character/String)
+    \end{itemize}
+    This dataset will be imported into R for text processing, filtering for cryptocurrency-related keywords, and calculating sentiment scores.
+\end{enumerate}
+
+\textbf{Data Sources:}  
+\begin{itemize}
+    \item Cryptocurrency data: \url{https://finance.yahoo.com/} (via \texttt{yfinance} CSV export)
+    \item Elon Musk tweets: Public Twitter archives or Twitter API (provide exact link if available)
+\end{itemize}
+
+\section*{Planned Analysis and Approach in R}
+
+The goal of this project is to explore whether Elon Musk's tweets have a measurable effect on cryptocurrency prices. The analysis will be conducted entirely in R and will include the following steps:
+
+\begin{enumerate}[label=\arabic*.]
+    \item \textbf{Data Preprocessing:}  
+    \begin{itemize}
+        \item Import CSV files into R using \texttt{read.csv()} or \texttt{readr::read\_csv()}.
+        \item Convert timestamps to \texttt{POSIXct} format and handle missing values with \texttt{na.omit()} or \texttt{dplyr::drop\_na()}.
+        \item Drop irrelevant columns and ensure correct data types.
+        \item Preprocess tweet text using \texttt{stringr} for keyword detection and sentiment analysis via \texttt{tidytext}.
+    \end{itemize}
+
+    \item \textbf{Feature Engineering:}  
+    \begin{itemize}
+        \item Calculate daily returns, price changes, and volatility metrics from the crypto dataset.
+        \item Filter tweets containing cryptocurrency-related terms (e.g., BTC, Ethereum, Dogecoin).
+        \item Generate lagged features to study delayed effects of tweets on price movements.
+    \end{itemize}
+
+    \item \textbf{Data Integration:}  
+    \begin{itemize}
+        \item Merge datasets by date (and time if necessary) using \texttt{dplyr::left\_join()} or \texttt{merge()} in R.
+        \item Aggregate multiple tweets per day by sentiment scores, keyword counts, or other engagement metrics.
+    \end{itemize}
+
+    \item \textbf{Analysis:}  
+    \begin{itemize}
+        \item Perform correlation analysis and linear regression to examine relationships between tweet features and cryptocurrency price movements.
+        \item Conduct Granger causality tests using \texttt{lmtest} or \texttt{vars} packages to assess predictive effects of tweets.
+        \item Visualize patterns with \texttt{ggplot2} using line plots, scatterplots, and heatmaps.
+    \end{itemize}
+
+    \item \textbf{Deliverables:}  
+    \begin{itemize}
+        \item A written report summarizing methodology, analysis, and results.
+        \item Visualizations showing the relationship between Elon Musk's tweets and cryptocurrency prices.
+        \item A video presentation (maximum 8 minutes) highlighting key findings.
+    \end{itemize}
+\end{enumerate}
+
+\end{document}
