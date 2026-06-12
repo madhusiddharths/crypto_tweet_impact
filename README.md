@@ -86,6 +86,11 @@ stopping at a correlation and a scatter plot:
 
 ## Architecture & Methodology
 
+![Pipeline architecture: LLM-classified tweets joined to Yahoo Finance prices, run through a multi-horizon event study against a random baseline, corrected, and rendered to a Quarto report, Shiny dashboard, and LaTeX PDFs](reports/figures/architecture.png)
+
+<details>
+<summary>Text version of the pipeline</summary>
+
 ```
    Raw Musk tweets (~20k)                Yahoo Finance (quantmod)
    data/raw/*.csv                        DOGE/USD + BTC/USD daily OHLCV
@@ -114,6 +119,11 @@ stopping at a correlation and a scatter plot:
   Quarto HTML report          Shiny tweet-effects          LaTeX PDF reports
   (analysis/data_analysis.qmd)  dashboard (dashboard/app.R)   (docs/ → reports/)
 ```
+
+</details>
+
+> The diagram is generated from [`reports/figures/architecture.gv`](reports/figures/architecture.gv)
+> with Graphviz: `dot -Tpng -Gdpi=150 reports/figures/architecture.gv -o reports/figures/architecture.png`.
 
 **Analytical pipeline (in `analysis/data_analysis.qmd`):**
 

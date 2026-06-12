@@ -1,0 +1,61 @@
+digraph crypto_tweet_pipeline {
+  rankdir=TB;
+  bgcolor="white";
+  fontname="Helvetica";
+  labelloc="t";
+  fontsize=20;
+  label=<<b>Crypto Tweet-Impact Analysis &#8212; DOGE &amp; BTC Event Study</b>>;
+
+  node [fontname="Helvetica", fontsize=12, shape=box, style="rounded,filled", color="#33415C", fillcolor="#EEF2F7", penwidth=1.4, margin="0.18,0.10"];
+  edge [fontname="Helvetica", fontsize=10, color="#5A6B82", penwidth=1.3, arrowsize=0.8];
+
+  // ---- Sources ----
+  subgraph cluster_sources {
+    label=<<b>Data Sources</b>>; labeljust="l"; fontsize=13; color="#B9C6D8"; style="rounded,dashed";
+    tweets   [label=<Raw Musk tweets (~20k)<br/><font point-size="10" color="#5A6B82">data/raw/*.csv</font>>, fillcolor="#E3ECFB"];
+    yahoo    [label=<Yahoo Finance &#183; quantmod<br/><font point-size="10" color="#5A6B82">DOGE/USD + BTC/USD daily OHLCV</font>>, fillcolor="#E3F6EC"];
+  }
+
+  // ---- Labeling ----
+  kw       [label=<Crypto keyword filter<br/><font point-size="10" color="#5A6B82">bitcoin &#183; btc &#183; doge &#183; eth &#183; crypto</font>>];
+  llm      [label=<LLM sentiment &amp; category labeling<br/><font point-size="10" color="#5A6B82">OpenAI API &#183; manual coin verification</font>>, fillcolor="#FBF0E3"];
+  classified [label=<sentiment_classified.csv<br/><font point-size="10" color="#5A6B82">~20,370 rows &#183; data/processed/</font>>, fillcolor="#E3ECFB"];
+
+  // ---- Join ----
+  join     [label=<Join tweets &#10781; prices by date>, shape=box, fillcolor="#F1E7F7", color="#7A4F91"];
+
+  // ---- Analysis ----
+  subgraph cluster_analysis {
+    label=<<b>Event Study&#160;&#183;&#160;analysis/data_analysis.qmd</b>>; labeljust="l"; fontsize=13; color="#B9C6D8"; style="rounded,dashed";
+    returns  [label=<Multi-horizon returns<br/><font point-size="10" color="#5A6B82">1 / 3 / 7 / 30-day</font>>];
+    events   [label=<Event returns vs random baseline<br/><font point-size="10" color="#5A6B82">Welch t &#183; Mann-Whitney U &#183; Cohen's d</font>>];
+    hyp      [label=<Hypothesis tests<br/><font point-size="10" color="#5A6B82">correlation &#183; regression &#183; one-sample t</font>>];
+  }
+
+  correct  [label=<Multiple-testing correction + power analysis<br/><font point-size="10" color="#5A6B82">Bonferroni + Benjamini&#8211;Hochberg FDR &#183; pwr</font>>, fillcolor="#FDE7E7", color="#B23A3A"];
+
+  // ---- Outputs ----
+  subgraph cluster_outputs {
+    label=<<b>Deliverables</b>>; labeljust="l"; fontsize=13; color="#B9C6D8"; style="rounded,dashed";
+    quarto   [label=<Quarto HTML report<br/><font point-size="10" color="#5A6B82">self-contained, embed-resources</font>>, fillcolor="#E3F6EC"];
+    shiny    [label=<Shiny dashboard<br/><font point-size="10" color="#5A6B82">dashboard/app.R</font>>, fillcolor="#E3F6EC"];
+    pdf      [label=<LaTeX PDF reports<br/><font point-size="10" color="#5A6B82">docs/ &#8594; reports/</font>>, fillcolor="#E3F6EC"];
+  }
+
+  // ---- Edges ----
+  tweets -> kw -> llm -> classified;
+  classified -> join;
+  yahoo -> join;
+
+  join -> returns;
+  join -> events;
+  join -> hyp;
+
+  returns -> correct;
+  events -> correct;
+  hyp -> correct;
+
+  correct -> quarto;
+  correct -> shiny;
+  correct -> pdf;
+}
