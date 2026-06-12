@@ -167,7 +167,7 @@ need a LaTeX distribution (e.g. TinyTeX or MacTeX).
 
 ```bash
 # 1. Clone
-git clone https://github.com/madhusiddharths/crypto-tweet-impact-analysis
+git clone https://github.com/madhusiddharths/crypto_tweet_impact
 cd crypto-tweet-impact-analysis
 
 # 2. Install R dependencies
